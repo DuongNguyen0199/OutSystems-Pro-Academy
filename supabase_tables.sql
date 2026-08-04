@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS public.mock_exam_questions (
     choices JSONB NOT NULL, -- Stores array: [{"key": "A", "text": "Choice A"}, ...]
     correct_answer VARCHAR(5) NOT NULL, -- "A", "B", "C", "D"
     explanation TEXT,
+    image_url TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -54,6 +55,50 @@ ON public.mock_exam_questions
 FOR SELECT 
 TO anon 
 USING (true);
+
+-- --------------------------------------------------
+-- 2.1 Create 'profiles' table for User Roles
+-- --------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.profiles (
+    id UUID PRIMARY KEY,
+    email TEXT UNIQUE NOT NULL,
+    role VARCHAR(20) DEFAULT 'student', -- 'student' or 'admin'
+    status VARCHAR(20) DEFAULT 'active', -- 'active' or 'banned'
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow public access to profiles" ON public.profiles FOR ALL USING (true);
+
+-- --------------------------------------------------
+-- 2.2 Create 'payment_requests' table
+-- --------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.payment_requests (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_email TEXT NOT NULL,
+    course_id UUID NOT NULL REFERENCES public.courses(id) ON DELETE CASCADE,
+    course_title TEXT NOT NULL,
+    amount NUMERIC NOT NULL,
+    status VARCHAR(20) DEFAULT 'pending', -- 'pending', 'completed', 'rejected'
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+ALTER TABLE public.payment_requests ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow public access to payment_requests" ON public.payment_requests FOR ALL USING (true);
+
+-- --------------------------------------------------
+-- 2.3 Create 'activation_codes' table (Max 5 failed attempts lock)
+-- --------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.activation_codes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    code TEXT UNIQUE NOT NULL,
+    user_email TEXT NOT NULL,
+    course_id UUID NOT NULL REFERENCES public.courses(id) ON DELETE CASCADE,
+    status VARCHAR(20) DEFAULT 'active', -- 'active', 'inactive', 'used'
+    failed_attempts INT DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+ALTER TABLE public.activation_codes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow public access to activation_codes" ON public.activation_codes FOR ALL USING (true);
+
 
 
 -- --------------------------------------------------

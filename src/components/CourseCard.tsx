@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Course, Question } from '../types';
-import { Lock, Gift, ChevronDown, ChevronUp, Eye, EyeOff, ClipboardList, BookOpen } from 'lucide-react';
+import { Course } from '../types';
+import { Lock, Gift, ChevronDown, ChevronUp, Eye, EyeOff, ClipboardList, BookOpen, Key } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import MockExam from './MockExam';
 
@@ -8,14 +8,20 @@ interface CourseCardProps {
   key?: string;
   course: Course;
   onSelectPayment: (course: Course) => void;
+  onSelectActivationCode: (course: Course) => void;
   onSelectVouchers: () => void;
 }
 
-export default function CourseCard({ course, onSelectPayment, onSelectVouchers }: CourseCardProps) {
+export default function CourseCard({
+  course,
+  onSelectPayment,
+  onSelectActivationCode,
+  onSelectVouchers,
+}: CourseCardProps) {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'free-questions' | 'interactive-exam'>('free-questions');
   const [expandedQuestions, setExpandedQuestions] = useState<Record<string, boolean>>({
-    [course.previewQuestions[0]?.id || '']: true // expand the first question by default
+    [course.previewQuestions[0]?.id || '']: true
   });
 
   const toggleQuestion = (id: string) => {
@@ -53,7 +59,6 @@ export default function CourseCard({ course, onSelectPayment, onSelectVouchers }
             className="w-full h-full object-cover"
             referrerPolicy="no-referrer"
           />
-          {/* Tag Overlay on mobile */}
           <div className="absolute top-2 right-2 bg-slate-900/90 backdrop-blur-xs text-white text-xs font-mono font-bold px-2.5 py-1 rounded-md md:hidden">
             ${course.price}
           </div>
@@ -66,7 +71,6 @@ export default function CourseCard({ course, onSelectPayment, onSelectVouchers }
               <h3 className="font-display font-bold text-lg md:text-xl text-slate-900 leading-snug">
                 {course.title}
               </h3>
-              {/* Price display on desktop */}
               <span className="font-display font-bold text-2xl text-slate-950 shrink-0 hidden md:inline-block">
                 ${course.price}
               </span>
@@ -94,7 +98,7 @@ export default function CourseCard({ course, onSelectPayment, onSelectVouchers }
       {/* Buttons Deck */}
       <div className="px-5 md:px-6 pb-5 md:pb-6 grid grid-cols-1 sm:grid-cols-3 gap-3 border-b border-slate-100">
         
-        {/* Toggle Preview Drawer */}
+        {/* Live Preview Toggle */}
         <button
           onClick={() => setIsPreviewOpen(!isPreviewOpen)}
           className={`flex items-center justify-center gap-2 font-semibold text-xs md:text-sm py-2.5 px-4 rounded-xl border transition-all cursor-pointer ${
@@ -109,25 +113,25 @@ export default function CourseCard({ course, onSelectPayment, onSelectVouchers }
             </>
           ) : (
             <>
-              <Eye className="w-4 h-4 text-blue-600" /> Live Preview
+              <Eye className="w-4 h-4 text-blue-600" /> Free Preview (10 Questions)
             </>
           )}
         </button>
 
-        {/* Payment Gateway Trigger */}
+        {/* Enter Code / Start Full Test Trigger */}
         <button
-          onClick={() => onSelectPayment(course)}
-          className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs md:text-sm py-2.5 px-4 rounded-xl transition-colors cursor-pointer shadow-sm"
+          onClick={() => onSelectActivationCode(course)}
+          className="flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs md:text-sm py-2.5 px-4 rounded-xl transition-all cursor-pointer shadow-sm"
         >
-          <Lock className="w-4 h-4" /> Get Full Questions
+          <Key className="w-4 h-4 text-amber-300" /> Enter Activation Code
         </button>
 
-        {/* Voucher Info Panel Trigger */}
+        {/* Payment QR / Request Access */}
         <button
-          onClick={onSelectVouchers}
-          className="flex items-center justify-center gap-2 border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs md:text-sm py-2.5 px-4 rounded-xl transition-colors cursor-pointer"
+          onClick={() => onSelectPayment(course)}
+          className="flex items-center justify-center gap-2 border border-slate-300 hover:bg-slate-50 text-slate-800 font-semibold text-xs md:text-sm py-2.5 px-4 rounded-xl transition-colors cursor-pointer"
         >
-          <Gift className="w-4 h-4 text-slate-500" /> OutSystems Vouchers
+          <Lock className="w-4 h-4 text-slate-500" /> Buy Course / Payment Info
         </button>
       </div>
 
@@ -152,7 +156,7 @@ export default function CourseCard({ course, onSelectPayment, onSelectVouchers }
                       : 'border-transparent text-slate-400 hover:text-slate-600'
                   }`}
                 >
-                  <ClipboardList className="w-3.5 h-3.5" /> Free Questions
+                  <ClipboardList className="w-3.5 h-3.5" /> Free Sample Questions
                 </button>
                 <button
                   onClick={() => setActiveTab('interactive-exam')}
@@ -162,14 +166,14 @@ export default function CourseCard({ course, onSelectPayment, onSelectVouchers }
                       : 'border-transparent text-slate-400 hover:text-slate-600'
                   }`}
                 >
-                  <BookOpen className="w-3.5 h-3.5 animate-pulse text-blue-600" /> Exam Practice Quiz
+                  <BookOpen className="w-3.5 h-3.5 text-blue-600" /> Quick Demo Quiz
                 </button>
               </div>
 
               {activeTab === 'free-questions' ? (
                 <div>
                   <h4 className="font-sans font-bold text-xs text-slate-500 mb-4 tracking-wide uppercase">
-                    Preview Questions ({course.previewQuestions.length} free, {course.previewQuestions.length} total)
+                    Free Sample Questions ({course.previewQuestions.length})
                   </h4>
                   
                   <div className="space-y-3">

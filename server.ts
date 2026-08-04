@@ -229,15 +229,369 @@ app.get("/api/courses", async (req, res) => {
       };
     });
 
-    return res.json({ source: "supabase", data: mapped });
-  } catch (err: any) {
-    console.error("Critical error in /api/courses, using local fallback:", err);
-    return res.json({ source: "local", data: fallbackCourses });
+// In-memory data store for fallback/demo
+const memoryPaymentRequests: any[] = [
+  {
+    id: "req_demo_1",
+    userEmail: "student.outsystems@gmail.com",
+    courseId: "48ad6d82-3994-490a-a4f4-c07f0a7a38db",
+    courseTitle: "OutSystems Agentic AI Specialist (ODC)",
+    amount: 29.99,
+    status: "pending",
+    createdAt: new Date().toISOString()
   }
+];
+
+const memoryActivationCodes: any[] = [
+  {
+    id: "code_demo_1",
+    code: "OUT-REACTIVE-90D-DEMO",
+    userEmail: "duongrbt@gmail.com",
+    courseId: "70daa8a9-20c7-4993-b292-54566ef12303",
+    status: "active",
+    failedAttempts: 0,
+    createdAt: new Date().toISOString()
+  }
+];
+
+import nodemailer from "nodemailer";
+
+// Dynamic Notification Settings (Configurable via Admin Dashboard or Render Env)
+let notificationSettings = {
+  adminEmail: process.env.ADMIN_EMAIL || "duongrbt@gmail.com",
+  gmailAppPassword: process.env.GMAIL_APP_PASSWORD || "",
+  telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || "",
+  telegramChatId: process.env.TELEGRAM_CHAT_ID || ""
+};
+
+// Helper to send Telegram Bot Notification to Admin
+async function sendTelegramAlert(message: string) {
+  const botToken = notificationSettings.telegramBotToken || process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = notificationSettings.telegramChatId || process.env.TELEGRAM_CHAT_ID;
+
+  if (!botToken || !chatId) {
+    console.log("[TELEGRAM ALERT SIMULATED TO ADMIN]:\n" + message);
+    return false;
+  }
+
+  try {
+    const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: message,
+        parse_mode: "Markdown"
+      })
+    });
+    return res.ok;
+  } catch (err) {
+    console.error("Failed to send Telegram alert:", err);
+    return false;
+  }
+}
+
+// Helper to send Gmail Alert via Nodemailer using Gmail App Password
+async function sendAdminEmailAlert(subject: string, text: string) {
+  const adminEmail = notificationSettings.adminEmail || process.env.ADMIN_EMAIL || "duongrbt@gmail.com";
+  const appPassword = notificationSettings.gmailAppPassword || process.env.GMAIL_APP_PASSWORD;
+
+  if (!adminEmail || !appPassword) {
+    console.log("[GMAIL ALERT SIMULATED TO ADMIN]:\nSubject: " + subject + "\n" + text);
+    return false;
+  }
+
+  try {
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: adminEmail,
+        pass: appPassword.replace(/\s+/g, "") // remove spaces if user formatted as xxxx xxxx xxxx xxxx
+      }
+    });
+
+    await transporter.sendMail({
+      from: `"OutSystems Pro Academy" <${adminEmail}>`,
+      to: adminEmail,
+      subject: subject,
+      text: text
+    });
+    console.log("Email notification sent successfully to " + adminEmail);
+    return true;
+  } catch (err) {
+    console.error("Failed to send Gmail alert:", err);
+    return false;
+  }
+}
+
+
+// Admin Auth Verification Endpoint using Render Environment Variables
+app.post("/api/auth/login", (req, res) => {
+  const { email, password } = req.body;
+  const inputEmail = (email || "").trim().toLowerCase();
+
+  const configuredAdminEmail = (process.env.ADMIN_EMAIL || "duongrbt@gmail.com").trim().toLowerCase();
+  const configuredAdminPassword = process.env.ADMIN_PASSWORD;
+
+  if (inputEmail === configuredAdminEmail) {
+    // If ADMIN_PASSWORD is defined in Render env variables, check exact match
+    if (configuredAdminPassword && password !== configuredAdminPassword) {
+      return res.status(401).json({ success: false, error: "Incorrect Admin Password." });
+    }
+
+    return res.json({
+      success: true,
+      user: {
+        id: "admin_1",
+        email: configuredAdminEmail,
+        role: "admin",
+        status: "active"
+      }
+    });
+  }
+
+  // Regular Student login
+  return res.json({
+    success: true,
+    user: {
+      id: "usr_" + Date.now(),
+      email: inputEmail,
+      role: "student",
+      status: "active"
+    }
+  });
+});
+
+// 1. Payment Request Notification Endpoint
+
+app.post("/api/payment-request", async (req, res) => {
+  const { userEmail, courseId, courseTitle, amount } = req.body;
+
+  if (!userEmail) {
+    return res.status(400).json({ error: "User email is required." });
+  }
+
+  const newRequest = {
+    id: "req_" + Date.now(),
+    userEmail: userEmail.trim().toLowerCase(),
+    courseId: courseId || "generic",
+    courseTitle: courseTitle || "OutSystems Practice Test",
+    amount: amount || 29.99,
+    status: "pending",
+    createdAt: new Date().toISOString()
+  };
+
+  memoryPaymentRequests.unshift(newRequest);
+
+  // 1. Send Telegram Notification
+  const telegramMsg = `🔔 *NEW OUTSYSTEMS DUMP PAYMENT REQUEST*
+📧 *User Email:* \`${userEmail}\`
+📘 *Course:* ${courseTitle}
+💰 *Amount:* $${amount}
+⏰ *Time:* ${new Date().toLocaleString()}
+
+👉 _Action Required:_ Check PayPal transfer and generate Activation Code via Admin Dashboard for this user.`;
+
+  const telegramSent = await sendTelegramAlert(telegramMsg);
+
+  // 2. Send Gmail Notification via Nodemailer App Password
+  const emailSubject = `[OutSystems Dump Request] New Payment Request from ${userEmail}`;
+  const emailText = `NEW PAYMENT REQUEST RECEIVED
+
+User Email: ${userEmail}
+Course: ${courseTitle}
+Amount: $${amount}
+Timestamp: ${new Date().toLocaleString()}
+
+Instructions:
+1. Verify PayPal payment from ${userEmail}.
+2. Log into Admin Dashboard at https://outsystems-pro-academy.onrender.com
+3. Generate Activation Code and email it to the student.`;
+
+  const emailSent = await sendAdminEmailAlert(emailSubject, emailText);
+
+  res.json({
+    success: true,
+    message: "Payment request submitted & Admin notified via Telegram & Email.",
+    notifications: { telegram: telegramSent, email: emailSent },
+    request: newRequest
+  });
+// 1.1 VietQR Automated Bank Payment Webhook (SePay / Casso Auto Activation in 3 Seconds)
+app.post("/api/webhooks/vietqr", async (req, res) => {
+  const { content, transferAmount, accumulator, gateway } = req.body;
+
+  // Extract transfer description (e.g. "OUT-REACTIVE student@gmail.com")
+  const textContent = (content || "").toUpperCase();
+
+  let matchedRequest = memoryPaymentRequests.find(r => 
+    textContent.includes(r.id.toUpperCase()) || textContent.includes(r.userEmail.toUpperCase())
+  );
+
+  const autoCode = `OUT-PASS-AUTO-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+
+  if (matchedRequest) {
+    matchedRequest.status = "completed";
+  }
+
+  const newCodeObj = {
+    id: "code_" + Date.now(),
+    code: autoCode,
+    userEmail: matchedRequest ? matchedRequest.userEmail : "auto.student@gmail.com",
+    courseId: matchedRequest ? matchedRequest.courseId : "generic",
+    status: "active",
+    failedAttempts: 0,
+    createdAt: new Date().toISOString()
+  };
+
+  memoryActivationCodes.unshift(newCodeObj);
+
+  // Send Dual Instant Alerts
+  const alertText = `✅ *VIETQR BANK TRANSFER RECEIVED & AUTO-ACTIVATED*
+💰 *Amount:* ${transferAmount || 750000} VND (${gateway || "Bank"})
+📝 *Content:* \`${content}\`
+🔑 *Auto-Generated Code:* \`${autoCode}\``;
+
+  await sendTelegramAlert(alertText);
+  await sendAdminEmailAlert("[VietQR Auto-Payment] Code Auto-Issued", alertText.replace(/\*/g, ""));
+
+  res.json({ success: true, code: autoCode });
+});
+
+
+// Notification Settings Management Endpoint (Role: Admin)
+app.get("/api/admin/notification-settings", (req, res) => {
+  res.json({
+    adminEmail: notificationSettings.adminEmail,
+    gmailAppPassword: notificationSettings.gmailAppPassword ? "••••••••••••••••" : "",
+    hasGmailAppPassword: Boolean(notificationSettings.gmailAppPassword),
+    telegramBotToken: notificationSettings.telegramBotToken ? "••••••••••••••••" : "",
+    hasTelegramBotToken: Boolean(notificationSettings.telegramBotToken),
+    telegramChatId: notificationSettings.telegramChatId
+  });
+});
+
+app.post("/api/admin/notification-settings", (req, res) => {
+  const { adminEmail, gmailAppPassword, telegramBotToken, telegramChatId } = req.body;
+
+  if (adminEmail) notificationSettings.adminEmail = adminEmail.trim();
+  if (gmailAppPassword && !gmailAppPassword.includes("••••")) {
+    notificationSettings.gmailAppPassword = gmailAppPassword.trim();
+  }
+  if (telegramBotToken && !telegramBotToken.includes("••••")) {
+    notificationSettings.telegramBotToken = telegramBotToken.trim();
+  }
+  if (telegramChatId) notificationSettings.telegramChatId = telegramChatId.trim();
+
+  res.json({
+    success: true,
+    message: "Notification settings saved successfully!",
+    settings: {
+      adminEmail: notificationSettings.adminEmail,
+      hasGmailAppPassword: Boolean(notificationSettings.gmailAppPassword),
+      hasTelegramBotToken: Boolean(notificationSettings.telegramBotToken),
+      telegramChatId: notificationSettings.telegramChatId
+    }
+  });
+});
+
+// Test Notifications Endpoint
+app.post("/api/admin/test-telegram", async (req, res) => {
+  const ok = await sendTelegramAlert("🧪 *Test Alert from OutSystems Pro Academy*\nTelegram notification integration is working perfectly!");
+  res.json({ success: ok, message: ok ? "Telegram test alert sent!" : "Could not send Telegram message. Check Bot Token & Chat ID." });
+});
+
+app.post("/api/admin/test-email", async (req, res) => {
+  const ok = await sendAdminEmailAlert(
+    "🧪 Test Notification from OutSystems Pro Academy",
+    "Gmail App Password integration is working perfectly! You will receive instant payment alerts here."
+  );
+  res.json({ success: ok, message: ok ? "Gmail test email sent!" : "Could not send Gmail email. Check Gmail App Password & Email address." });
+});
+
+
+// 2. Validate Activation Code Endpoint (Max 5 Failed Attempts Security Lock)
+app.post("/api/validate-code", (req, res) => {
+  const { code, userEmail, courseId } = req.body;
+  const searchCode = (code || "").trim().toUpperCase();
+
+  // Find code in memory or master demo codes
+  const foundCode = memoryActivationCodes.find((c) => c.code === searchCode);
+
+  if (!foundCode) {
+    return res.json({ valid: false, message: "Activation code does not exist.", failedAttempts: 1 });
+  }
+
+  // Check if code is already locked
+  if (foundCode.status === "inactive" || foundCode.failedAttempts >= 5) {
+    foundCode.status = "inactive";
+    return res.json({
+      valid: false,
+      locked: true,
+      failedAttempts: foundCode.failedAttempts,
+      message: "Code locked! Exceeded 5 failed attempts. Please contact Admin at duongrbt@gmail.com."
+    });
+  }
+
+  // Check course / email match or universal demo code
+  const isMatch = searchCode.includes("DEMO") || (
+    (!foundCode.userEmail || foundCode.userEmail.toLowerCase() === (userEmail || "").toLowerCase()) &&
+    (!foundCode.courseId || foundCode.courseId === courseId)
+  );
+
+  if (!isMatch) {
+    foundCode.failedAttempts += 1;
+
+    if (foundCode.failedAttempts >= 5) {
+      foundCode.status = "inactive";
+      return res.json({
+        valid: false,
+        locked: true,
+        failedAttempts: 5,
+        message: "Code locked! Exceeded 5 failed attempts. Please contact Admin at duongrbt@gmail.com."
+      });
+    }
+
+    return res.json({
+      valid: false,
+      failedAttempts: foundCode.failedAttempts,
+      message: `Invalid code or email mismatch. Failed attempt ${foundCode.failedAttempts} of 5.`
+    });
+  }
+
+  // Code is valid! Mark as used/active
+  res.json({ valid: true, message: "Code successfully verified!", code: foundCode });
+});
+
+// 3. Admin: Generate Activation Code
+app.post("/api/admin/generate-code", (req, res) => {
+  const { code, userEmail, courseId } = req.body;
+
+  const newCodeObj = {
+    id: "code_" + Date.now(),
+    code: code || `OUT-PASS-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
+    userEmail: (userEmail || "").trim().toLowerCase(),
+    courseId: courseId || "",
+    status: "active",
+    failedAttempts: 0,
+    createdAt: new Date().toISOString()
+  };
+
+  memoryActivationCodes.unshift(newCodeObj);
+  res.json({ success: true, code: newCodeObj });
+});
+
+// 4. Admin: Get Requests & Codes
+app.get("/api/admin/payment-requests", (req, res) => {
+  res.json({
+    requests: memoryPaymentRequests,
+    codes: memoryActivationCodes
+  });
 });
 
 // Lazy initialize Gemini API only when the endpoint is first requested to handle missing keys gracefully.
 let aiClient: GoogleGenAI | null = null;
+
 
 
 function getGeminiClient(): GoogleGenAI {

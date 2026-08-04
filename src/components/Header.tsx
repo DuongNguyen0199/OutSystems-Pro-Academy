@@ -1,24 +1,35 @@
 import React from 'react';
-import { Gift, Award, Youtube } from 'lucide-react';
+import { Gift, Award, Youtube, User, LogOut, Shield } from 'lucide-react';
+import { UserProfile } from '../types';
 
 interface HeaderProps {
   dbSource?: string;
+  user: UserProfile | null;
   onOpenVouchers?: () => void;
+  onOpenAuth: () => void;
+  onOpenAdmin: () => void;
+  onLogout: () => void;
 }
 
-export default function Header({ dbSource = 'local', onOpenVouchers }: HeaderProps) {
+export default function Header({
+  dbSource = 'local',
+  user,
+  onOpenVouchers,
+  onOpenAuth,
+  onOpenAdmin,
+  onLogout,
+}: HeaderProps) {
   return (
-    <header className="w-full bg-white border-b border-slate-100 py-3.5 px-4 md:px-12 sticky top-0 z-50 shadow-xs">
+    <header className="w-full bg-white border-b border-slate-100 py-3.5 px-4 md:px-12 sticky top-0 z-40 shadow-xs">
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3">
+        {/* Logo & Title */}
         <div className="flex items-center gap-3">
-          {/* OutSystems style concentric logo */}
           <div className="relative w-9 h-9 flex items-center justify-center shrink-0">
             <div className="absolute w-9 h-9 bg-red-600 rounded-full flex items-center justify-center shadow-xs">
               <div className="w-5.5 h-5.5 border-3 border-white rounded-full flex items-center justify-center">
                 <div className="w-1.5 h-1.5 bg-red-600 rounded-full"></div>
               </div>
             </div>
-            {/* Small red tail node representing the classic OutSystems target element */}
             <div className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-white rounded-full flex items-center justify-center">
               <div className="w-1.5 h-1.5 bg-red-600 rounded-full"></div>
             </div>
@@ -29,38 +40,70 @@ export default function Header({ dbSource = 'local', onOpenVouchers }: HeaderPro
               OutSystems Pro Academy
               <span className="hidden sm:inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-100 text-[10px] font-bold px-1.5 py-0.5 rounded-md">
                 <Award className="w-3 h-3 text-blue-500" />
-                Specialist
+                Specialist Dumps
               </span>
             </h1>
             <p className="font-sans text-[11px] text-slate-500 font-medium">
-              OutSystems Practice Tests & Exam Preparation
+              OutSystems Practice Tests & Certification Exam Dumps
             </p>
           </div>
         </div>
         
-        {/* Interactive Promo / Vouchers trigger and Highly Prominent YouTube badge */}
+        {/* Right Nav Actions */}
         <div className="flex flex-wrap items-center justify-center gap-2 shrink-0">
           <a
             href="https://www.youtube.com/@outsystems-pro-academy"
             target="_blank"
             rel="noopener noreferrer"
-            className="group flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold px-3.5 py-1.5 rounded-full shadow-xs hover:shadow-md transition-all cursor-pointer transform hover:-translate-y-0.5 active:translate-y-0"
+            className="group flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-full shadow-xs hover:shadow-md transition-all cursor-pointer"
           >
             <Youtube className="w-3.5 h-3.5 fill-white text-white animate-pulse" />
-            <span>YouTube Channel</span>
+            <span className="hidden sm:inline">YouTube</span>
           </a>
 
           {onOpenVouchers && (
             <button
               onClick={onOpenVouchers}
-              className="group flex items-center gap-1.5 bg-linear-to-r from-amber-500 via-orange-500 to-red-500 hover:from-amber-600 hover:via-orange-600 hover:to-red-600 text-white text-[11px] font-bold px-3.5 py-1.5 rounded-full shadow-xs hover:shadow-md transition-all cursor-pointer transform hover:-translate-y-0.5 active:translate-y-0"
+              className="group flex items-center gap-1.5 bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 hover:from-amber-600 hover:to-red-600 text-white text-[11px] font-bold px-3 py-1.5 rounded-full shadow-xs hover:shadow-md transition-all cursor-pointer"
             >
-              <Gift className="w-3.5 h-3.5 animate-bounce group-hover:scale-110 transition-transform" />
-              <span>Get 100% Discount Vouchers</span>
-              <span className="flex h-1.5 w-1.5 relative">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-200"></span>
+              <Gift className="w-3.5 h-3.5 animate-bounce" />
+              <span>Vouchers</span>
+            </button>
+          )}
+
+          {/* User Auth / Admin buttons */}
+          {user ? (
+            <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-full border border-slate-200">
+              <span className="text-xs font-bold text-slate-800 px-2.5 truncate max-w-[120px] sm:max-w-xs flex items-center gap-1">
+                <User className="w-3.5 h-3.5 text-blue-600" />
+                {user.email}
               </span>
+
+              {user.role === 'admin' && (
+                <button
+                  onClick={onOpenAdmin}
+                  className="bg-slate-900 hover:bg-slate-800 text-amber-400 font-bold text-[11px] px-2.5 py-1 rounded-full flex items-center gap-1 transition-colors cursor-pointer"
+                >
+                  <Shield className="w-3 h-3 text-amber-400" />
+                  <span>Admin</span>
+                </button>
+              )}
+
+              <button
+                onClick={onLogout}
+                className="text-slate-400 hover:text-red-600 p-1 rounded-full transition-colors cursor-pointer"
+                title="Logout"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={onOpenAuth}
+              className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold px-3.5 py-1.5 rounded-full shadow-xs transition-all cursor-pointer"
+            >
+              <User className="w-3.5 h-3.5" />
+              <span>Sign In / Register</span>
             </button>
           )}
         </div>
@@ -68,5 +111,3 @@ export default function Header({ dbSource = 'local', onOpenVouchers }: HeaderPro
     </header>
   );
 }
-
-

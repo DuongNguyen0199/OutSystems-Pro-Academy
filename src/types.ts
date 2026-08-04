@@ -16,6 +16,7 @@ export interface MockExamQuestion {
   choices: Choice[];
   correctAnswer: string;
   explanation: string;
+  imageUrl?: string;
 }
 
 export interface Course {
@@ -23,9 +24,37 @@ export interface Course {
   title: string;
   price: number;
   originalPrice?: number;
-  tags: { text: string; color: 'blue' | 'green' | 'orange' | 'purple' }[];
+  tags: { text: string; color: string }[];
   description: string;
   imageUrl: string;
   previewQuestions: Question[];
   mockExam: MockExamQuestion[];
 }
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  role: 'student' | 'admin';
+  status: 'active' | 'banned';
+}
+
+export interface PaymentRequest {
+  id: string;
+  userEmail: string;
+  courseId: string;
+  courseTitle: string;
+  amount: number;
+  status: 'pending' | 'completed' | 'rejected';
+  createdAt: string;
+}
+
+export interface ActivationCode {
+  id: string;
+  code: string;
+  userEmail: string;
+  courseId: string;
+  status: 'active' | 'inactive' | 'used';
+  failedAttempts: number;
+  createdAt: string;
+}
+
