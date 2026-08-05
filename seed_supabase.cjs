@@ -17,6 +17,23 @@ if (!supabaseUrl || !supabaseKey) {
 
 const rootDir = 'C:\\Users\\nguye\\Desktop\\Udemy\\Outsystems Experiences';
 
+function getAllCsvFilesRecursively(dir) {
+  let results = [];
+  if (!fs.existsSync(dir)) return results;
+
+  const list = fs.readdirSync(dir);
+  list.forEach(file => {
+    const filePath = path.join(dir, file);
+    const stat = fs.statSync(filePath);
+    if (stat && stat.isDirectory()) {
+      results = results.concat(getAllCsvFilesRecursively(filePath));
+    } else if (file.toLowerCase().endsWith('.csv')) {
+      results.push(filePath);
+    }
+  });
+  return results;
+}
+
 function parseCsvFile(filePath) {
   if (!fs.existsSync(filePath)) return [];
   const content = fs.readFileSync(filePath, 'utf8');
@@ -41,14 +58,10 @@ function parseCsvFile(filePath) {
 
   if (lines.length < 2) return [];
 
-  const questions = [];
-
-  for (let l = 1; l < lines.length; l++) {
-    const line = lines[l];
+  const parseLineCells = (line) => {
     const cells = [];
     let cell = '';
     let insideQuotes = false;
-
     for (let i = 0; i < line.length; i++) {
       const c = line[i];
       if (c === '"') {
@@ -61,29 +74,66 @@ function parseCsvFile(filePath) {
       }
     }
     cells.push(cell.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
+    return cells;
+  };
 
-    if (cells.length < 3) continue;
+  const headerCells = parseLineCells(lines[0]).map(h => h.toLowerCase());
+  const questions = [];
 
-    const questionText = cells[0];
-    if (!questionText || questionText.toLowerCase().includes('question')) continue;
+  for (let l = 1; l < lines.length; l++) {
+    const cells = parseLineCells(lines[l]);
+    if (cells.length < 2) continue;
 
-    const choices = [];
-    if (cells[2]) choices.push({ key: 'A', text: cells[2] });
-    if (cells[4]) choices.push({ key: 'B', text: cells[4] });
-    if (cells[6]) choices.push({ key: 'C', text: cells[6] });
-    if (cells[8]) choices.push({ key: 'D', text: cells[8] });
+    let questionText = cells[0];
+    if (!questionText || questionText.toLowerCase() === 'question') continue;
 
+    let choices = [];
     let correctKey = 'A';
-    if (cells[14]) {
-      const num = parseInt(cells[14], 10);
-      if (num === 1) correctKey = 'A';
-      else if (num === 2) correctKey = 'B';
-      else if (num === 3) correctKey = 'C';
-      else if (num === 4) correctKey = 'D';
-      else if (['A', 'B', 'C', 'D'].includes(cells[14].toUpperCase())) correctKey = cells[14].toUpperCase();
-    }
+    let explanation = 'Official OutSystems Exam Question';
 
-    const explanation = cells[15] || cells[3] || cells[5] || 'Official OutSystems Exam Question';
+    const opt1Idx = headerCells.findIndex(h => h.includes('answer option 1') || h === 'choice a' || h === 'option a');
+    const opt2Idx = headerCells.findIndex(h => h.includes('answer option 2') || h === 'choice b' || h === 'option b');
+    const opt3Idx = headerCells.findIndex(h => h.includes('answer option 3') || h === 'choice c' || h === 'option c');
+    const opt4Idx = headerCells.findIndex(h => h.includes('answer option 4') || h === 'choice d' || h === 'option d');
+    const correctIdx = headerCells.findIndex(h => h.includes('correct answer') || h.includes('correctanswers') || h.includes('correct'));
+    const expIdx = headerCells.findIndex(h => h.includes('overall explanation') || h.includes('explanation'));
+
+    if (opt1Idx !== -1 && opt2Idx !== -1) {
+      if (cells[opt1Idx]) choices.push({ key: 'A', text: cells[opt1Idx] });
+      if (cells[opt2Idx]) choices.push({ key: 'B', text: cells[opt2Idx] });
+      if (opt3Idx !== -1 && cells[opt3Idx]) choices.push({ key: 'C', text: cells[opt3Idx] });
+      if (opt4Idx !== -1 && cells[opt4Idx]) choices.push({ key: 'D', text: cells[opt4Idx] });
+
+      if (correctIdx !== -1 && cells[correctIdx]) {
+        const rawAns = cells[correctIdx].trim();
+        const num = parseInt(rawAns, 10);
+        if (num === 1) correctKey = 'A';
+        else if (num === 2) correctKey = 'B';
+        else if (num === 3) correctKey = 'C';
+        else if (num === 4) correctKey = 'D';
+        else if (['A', 'B', 'C', 'D'].includes(rawAns.toUpperCase())) correctKey = rawAns.toUpperCase();
+      }
+
+      if (expIdx !== -1 && cells[expIdx]) {
+        explanation = cells[expIdx];
+      }
+    } else {
+      if (cells[2]) choices.push({ key: 'A', text: cells[2] });
+      if (cells[4]) choices.push({ key: 'B', text: cells[4] });
+      if (cells[6]) choices.push({ key: 'C', text: cells[6] });
+      if (cells[8]) choices.push({ key: 'D', text: cells[8] });
+
+      if (cells[14]) {
+        const num = parseInt(cells[14], 10);
+        if (num === 1) correctKey = 'A';
+        else if (num === 2) correctKey = 'B';
+        else if (num === 3) correctKey = 'C';
+        else if (num === 4) correctKey = 'D';
+        else if (['A', 'B', 'C', 'D'].includes(cells[14].toUpperCase())) correctKey = cells[14].toUpperCase();
+      }
+
+      explanation = cells[15] || cells[3] || cells[5] || explanation;
+    }
 
     if (questionText && choices.length >= 2) {
       questions.push({
@@ -113,7 +163,6 @@ const coursesData = [
 ];
 
 async function seedSupabase() {
-  // Ensure fetch is available on Node < 18
   if (typeof globalThis.fetch === 'undefined') {
     const nodeFetch = await import('node-fetch');
     globalThis.fetch = nodeFetch.default || nodeFetch;
@@ -173,8 +222,8 @@ async function seedSupabase() {
 
     console.log(`✅ Course synced: ${c.title}`);
 
-    // Upsert corresponding Exam practice set
-    const examId = `11111111-2222-3333-4444-${c.id.substring(0, 12)}`;
+    const hex = c.id.replace(/-/g, '');
+    const examId = `${hex.substring(0, 8)}-${hex.substring(8, 12)}-4${hex.substring(13, 16)}-a${hex.substring(17, 20)}-${hex.substring(20, 32)}`;
     const { error: examErr } = await supabase.from('exams').upsert({
       id: examId,
       course_id: c.id,
@@ -188,39 +237,22 @@ async function seedSupabase() {
     }
   }
 
-  // 3. Read Dump Questions & Insert into exam_questions & mock_exam_questions
+  // 3. Read Dump Questions Recursively & Insert into exam_questions & mock_exam_questions
   let totalQuestions = 0;
 
   for (const c of coursesData) {
-    const examId = `11111111-2222-3333-4444-${c.id.substring(0, 12)}`;
+    const hex = c.id.replace(/-/g, '');
+    const examId = `${hex.substring(0, 8)}-${hex.substring(8, 12)}-4${hex.substring(13, 16)}-a${hex.substring(17, 20)}-${hex.substring(20, 32)}`;
     const dirPath = path.join(rootDir, c.folder);
     let courseQuestions = [];
 
-    if (fs.existsSync(dirPath)) {
-      const files = fs.readdirSync(dirPath);
-      files.forEach(file => {
-        if (file.toLowerCase().endsWith('.csv')) {
-          const fullPath = path.join(dirPath, file);
-          const parsed = parseCsvFile(fullPath);
-          courseQuestions = courseQuestions.concat(parsed);
-        }
-      });
-
-      const sourceDir = path.join(dirPath, 'Source');
-      if (fs.existsSync(sourceDir)) {
-        const sourceFiles = fs.readdirSync(sourceDir);
-        sourceFiles.forEach(file => {
-          if (file.toLowerCase().endsWith('.csv')) {
-            const fullPath = path.join(sourceDir, file);
-            const parsed = parseCsvFile(fullPath);
-            courseQuestions = courseQuestions.concat(parsed);
-          }
-        });
-      }
-    }
+    const allCsvFiles = getAllCsvFilesRecursively(dirPath);
+    allCsvFiles.forEach(file => {
+      const parsed = parseCsvFile(file);
+      courseQuestions = courseQuestions.concat(parsed);
+    });
 
     if (courseQuestions.length > 0) {
-      // 3.1 Insert into legacy mock_exam_questions table for backwards compatibility
       const mockPayload = courseQuestions.map(q => ({
         course_id: c.id,
         question: q.question_text,
@@ -234,7 +266,6 @@ async function seedSupabase() {
         await supabase.from('mock_exam_questions').insert(chunk);
       }
 
-      // 3.2 Insert into refactored exam_questions table
       const examPayload = courseQuestions.map(q => ({
         exam_id: examId,
         question_text: q.question_text,
@@ -249,7 +280,6 @@ async function seedSupabase() {
         if (!qErr && insertedQs) {
           totalQuestions += insertedQs.length;
 
-          // Insert normalized question_options for 3NF schema
           const optionsPayload = [];
           insertedQs.forEach((iq, idx) => {
             const originalChoices = courseQuestions[i + idx]?.choices || [];
@@ -268,11 +298,11 @@ async function seedSupabase() {
         }
       }
 
-      console.log(`  -> Synced ${courseQuestions.length} dump questions to both mock_exam_questions and exam_questions tables for ${c.title}`);
+      console.log(`  -> Synced ${courseQuestions.length} dump questions (from ${allCsvFiles.length} CSV files) for ${c.title}`);
     }
   }
 
-  console.log(`\n🎉 SUPABASE 9-TABLE REFACTORED SEEDING COMPLETED! Total questions synced: ${totalQuestions}`);
+  console.log(`\n🎉 SUPABASE 9-TABLE SEEDING COMPLETED! Total questions synced: ${totalQuestions}`);
 }
 
 seedSupabase().catch(err => console.error("Migration error:", err));

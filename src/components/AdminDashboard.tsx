@@ -18,7 +18,12 @@ import {
   Lock,
   BookOpen,
   DollarSign,
-  Tag
+  Tag,
+  ArrowLeft,
+  Search,
+  CheckCircle2,
+  Trash2,
+  RefreshCw
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -34,7 +39,8 @@ export default function AdminDashboard({
 }: AdminDashboardProps) {
   const [activeTab, setActiveTab] = useState<'courses' | 'payments' | 'questions' | 'notifications'>('courses');
   const [selectedCourseId, setSelectedCourseId] = useState<string>(courses[0]?.id || '');
-  
+  const [searchQuestionQuery, setSearchQuestionQuery] = useState('');
+
   // Payment requests & activation codes state
   const [paymentRequests, setPaymentRequests] = useState<PaymentRequest[]>([]);
   const [activationCodes, setActivationCodes] = useState<ActivationCode[]>([]);
@@ -45,7 +51,7 @@ export default function AdminDashboard({
   const [generatedCodeResult, setGeneratedCodeResult] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
 
-  // Question editing modal state
+  // Question editing drawer state
   const [editingQuestion, setEditingQuestion] = useState<MockExamQuestion | null>(null);
   const [qText, setQText] = useState('');
   const [choiceA, setChoiceA] = useState('');
@@ -322,28 +328,97 @@ export default function AdminDashboard({
     onUpdateCourses(updatedCourses);
   };
 
+  // ENHANCED MULTI-FORMAT CSV PARSER (Supports both standard & Delivery/RBT/1.csv layout)
   const handleImportCsv = () => {
     if (!csvContent.trim()) return;
-    const lines = csvContent.split('\n').filter((l) => l.trim() !== '');
+    
+    const parseLineCells = (line: string) => {
+      const cells: string[] = [];
+      let cell = '';
+      let insideQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const c = line[i];
+        if (c === '"') {
+          insideQuotes = !insideQuotes;
+        } else if (c === ',' && !insideQuotes) {
+          cells.push(cell.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
+          cell = '';
+        } else {
+          cell += c;
+        }
+      }
+      cells.push(cell.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
+      return cells;
+    };
+
+    const rawLines = csvContent.split('\n').filter((l) => l.trim() !== '');
+    if (rawLines.length < 2) {
+      setCsvMessage('Invalid CSV content: At least 2 lines (header + row) required.');
+      return;
+    }
+
+    const headerCells = parseLineCells(rawLines[0]).map(h => h.toLowerCase());
     const newQuestions: MockExamQuestion[] = [];
 
-    lines.forEach((line, idx) => {
-      const parts = line.split(',');
-      if (parts.length >= 4) {
+    for (let i = 1; i < rawLines.length; i++) {
+      const cells = parseLineCells(rawLines[i]);
+      if (cells.length < 2) continue;
+
+      const questionText = cells[0];
+      if (!questionText || questionText.toLowerCase() === 'question') continue;
+
+      const choices: { key: string; text: string }[] = [];
+      let correctKey = 'A';
+      let explanation = 'Official OutSystems Exam Question';
+
+      const opt1Idx = headerCells.findIndex(h => h.includes('answer option 1') || h === 'choice a' || h === 'option a');
+      const opt2Idx = headerCells.findIndex(h => h.includes('answer option 2') || h === 'choice b' || h === 'option b');
+      const opt3Idx = headerCells.findIndex(h => h.includes('answer option 3') || h === 'choice c' || h === 'option c');
+      const opt4Idx = headerCells.findIndex(h => h.includes('answer option 4') || h === 'choice d' || h === 'option d');
+      const correctIdx = headerCells.findIndex(h => h.includes('correct answer') || h.includes('correctanswers') || h.includes('correct'));
+      const expIdx = headerCells.findIndex(h => h.includes('overall explanation') || h.includes('explanation'));
+
+      if (opt1Idx !== -1 && opt2Idx !== -1) {
+        if (cells[opt1Idx]) choices.push({ key: 'A', text: cells[opt1Idx] });
+        if (cells[opt2Idx]) choices.push({ key: 'B', text: cells[opt2Idx] });
+        if (opt3Idx !== -1 && cells[opt3Idx]) choices.push({ key: 'C', text: cells[opt3Idx] });
+        if (opt4Idx !== -1 && cells[opt4Idx]) choices.push({ key: 'D', text: cells[opt4Idx] });
+
+        if (correctIdx !== -1 && cells[correctIdx]) {
+          const rawAns = cells[correctIdx].trim();
+          const num = parseInt(rawAns, 10);
+          if (num === 1) correctKey = 'A';
+          else if (num === 2) correctKey = 'B';
+          else if (num === 3) correctKey = 'C';
+          else if (num === 4) correctKey = 'D';
+          else if (['A', 'B', 'C', 'D'].includes(rawAns.toUpperCase())) correctKey = rawAns.toUpperCase();
+        }
+
+        if (expIdx !== -1 && cells[expIdx]) {
+          explanation = cells[expIdx];
+        }
+      } else {
+        if (cells[1]) choices.push({ key: 'A', text: cells[1] });
+        if (cells[2]) choices.push({ key: 'B', text: cells[2] });
+        if (cells[3]) choices.push({ key: 'C', text: cells[3] });
+        if (cells[4]) choices.push({ key: 'D', text: cells[4] });
+
+        if (cells[5]) {
+          correctKey = cells[5].trim().toUpperCase();
+        }
+        if (cells[6]) explanation = cells[6];
+      }
+
+      if (questionText && choices.length >= 2) {
         newQuestions.push({
-          id: `csv_q_${Date.now()}_${idx}`,
-          question: parts[0].replace(/^"|"$/g, ''),
-          choices: [
-            { key: 'A', text: parts[1]?.replace(/^"|"$/g, '') || '' },
-            { key: 'B', text: parts[2]?.replace(/^"|"$/g, '') || '' },
-            { key: 'C', text: parts[3]?.replace(/^"|"$/g, '') || '' },
-            { key: 'D', text: parts[4]?.replace(/^"|"$/g, '') || '' }
-          ],
-          correctAnswer: parts[5]?.trim().toUpperCase() || 'A',
-          explanation: parts[6]?.replace(/^"|"$/g, '') || 'Imported via CSV Bank'
+          id: `csv_q_${Date.now()}_${i}`,
+          question: questionText,
+          choices: choices,
+          correctAnswer: correctKey,
+          explanation: explanation
         });
       }
-    });
+    }
 
     if (newQuestions.length > 0) {
       const updatedCourses = courses.map((c) => {
@@ -357,361 +432,399 @@ export default function AdminDashboard({
       setCsvMessage(`Successfully imported ${newQuestions.length} questions into selected course!`);
       setCsvContent('');
     } else {
-      setCsvMessage('Could not parse CSV.');
+      setCsvMessage('Could not parse questions. Check CSV columns format.');
     }
   };
 
   const selectedCourse = courses.find((c) => c.id === selectedCourseId) || courses[0];
+  const filteredQuestions = (selectedCourse.mockExam || []).filter(q => 
+    q.question.toLowerCase().includes(searchQuestionQuery.toLowerCase()) ||
+    q.choices.some(c => c.text.toLowerCase().includes(searchQuestionQuery.toLowerCase()))
+  );
 
   return (
-    <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center z-50 p-3 sm:p-6 overflow-y-auto">
-      <div className="bg-white rounded-3xl w-full max-w-5xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden border border-slate-200">
-        
-        {/* Header */}
-        <div className="bg-slate-900 text-white p-5 flex items-center justify-between shrink-0">
+    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans">
+      
+      {/* Top Navbar */}
+      <header className="bg-slate-950 border-b border-slate-800 px-6 py-4 flex items-center justify-between sticky top-0 z-30 shadow-md">
+        <div className="flex items-center gap-4">
+          <button
+            onClick={onClose}
+            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl border border-slate-700 transition-all cursor-pointer"
+          >
+            <ArrowLeft className="w-4 h-4 text-blue-400" />
+            <span>Back to Portal Home</span>
+          </button>
+
+          <div className="h-6 w-px bg-slate-800 hidden sm:block" />
+
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-red-600 rounded-xl flex items-center justify-center font-bold">
+            <div className="w-9 h-9 bg-red-600 rounded-xl flex items-center justify-center font-bold shadow-md shadow-red-900/40">
               <Shield className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h2 className="font-display font-extrabold text-lg text-white">
-                Admin Management Dashboard
-              </h2>
-              <p className="text-xs text-slate-400">
-                OutSystems Pro Academy — Courses, Payments, Questions & Notifications
+              <h1 className="font-display font-extrabold text-base text-white tracking-tight flex items-center gap-2">
+                OutSystems Admin Command Center
+                <span className="text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                  LIVE SECURE SESSION
+                </span>
+              </h1>
+              <p className="text-xs text-slate-400 font-medium">
+                Admin: <strong className="text-slate-200">duongrbt@gmail.com</strong> — Supabase 9-Table Database Sync Enabled
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="text-slate-400 hover:text-white p-1.5 hover:bg-slate-800 rounded-full transition-colors cursor-pointer"
-          >
-            <X className="w-6 h-6" />
-          </button>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="bg-slate-100 px-6 pt-3 border-b border-slate-200 flex gap-4 shrink-0 overflow-x-auto">
+        {/* Tab Selection Navigation Bar */}
+        <div className="flex items-center gap-2 bg-slate-900 p-1.5 rounded-2xl border border-slate-800">
           <button
             onClick={() => setActiveTab('courses')}
-            className={`pb-3 text-xs font-bold transition-all border-b-2 flex items-center gap-2 cursor-pointer shrink-0 ${
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
               activeTab === 'courses'
-                ? 'border-blue-600 text-blue-600 font-extrabold'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
             }`}
           >
-            <BookOpen className="w-4 h-4 text-blue-600" />
-            <span>Course Settings</span>
+            <BookOpen className="w-4 h-4" />
+            <span>Course Catalog</span>
           </button>
 
           <button
             onClick={() => setActiveTab('payments')}
-            className={`pb-3 text-xs font-bold transition-all border-b-2 flex items-center gap-2 cursor-pointer shrink-0 ${
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
               activeTab === 'payments'
-                ? 'border-blue-600 text-blue-600 font-extrabold'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
             }`}
           >
             <Mail className="w-4 h-4" />
-            <span>Payments & Code Generator</span>
+            <span>Payments & Codes</span>
           </button>
 
           <button
             onClick={() => setActiveTab('questions')}
-            className={`pb-3 text-xs font-bold transition-all border-b-2 flex items-center gap-2 cursor-pointer shrink-0 ${
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
               activeTab === 'questions'
-                ? 'border-blue-600 text-blue-600 font-extrabold'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
             }`}
           >
             <FileSpreadsheet className="w-4 h-4" />
-            <span>Question Bank & CSV Import</span>
+            <span>Question Bank</span>
           </button>
 
           <button
             onClick={() => setActiveTab('notifications')}
-            className={`pb-3 text-xs font-bold transition-all border-b-2 flex items-center gap-2 cursor-pointer shrink-0 ${
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
               activeTab === 'notifications'
-                ? 'border-blue-600 text-blue-600 font-extrabold'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
             }`}
           >
-            <BellRing className="w-4 h-4 text-amber-500" />
-            <span>Gmail & Telegram Settings</span>
+            <BellRing className="w-4 h-4 text-amber-400" />
+            <span>Alerts & API</span>
           </button>
         </div>
+      </header>
 
-        {/* Tab Body */}
-        <div className="p-6 overflow-y-auto space-y-6 flex-1 bg-slate-50/50">
-          
-          {/* TAB 1: COURSE CATALOG MANAGEMENT */}
-          {activeTab === 'courses' && (
-            <div className="space-y-6">
-              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-display font-bold text-base text-slate-900 flex items-center gap-2">
-                      <BookOpen className="w-5 h-5 text-blue-600" />
-                      Course Catalog Settings & Pricing
-                    </h3>
-                    <p className="text-xs text-slate-500 font-medium mt-1">
-                      Edit course titles, descriptions, prices, image URLs, and platform tags synced to Supabase database.
-                    </p>
-                  </div>
-                  <span className="text-xs font-bold bg-blue-50 text-blue-700 px-3 py-1 rounded-full border border-blue-100">
-                    {courses.length} Active Courses
-                  </span>
-                </div>
+      {/* Main Full-Screen Workspace */}
+      <main className="flex-1 w-full max-w-7xl mx-auto p-6 space-y-8">
 
-                {/* Course List Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                  {courses.map((c) => (
-                    <div key={c.id} className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex gap-4 items-start hover:border-blue-300 transition-all">
+        {/* TAB 1: COURSE CATALOG MANAGEMENT */}
+        {activeTab === 'courses' && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="font-display font-extrabold text-xl text-white flex items-center gap-2.5">
+                  <BookOpen className="w-6 h-6 text-blue-400" />
+                  Course Catalog & Pricing Management
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  Manage title, description, price, platform, and cover image for all OutSystems certification courses.
+                </p>
+              </div>
+
+              <span className="text-xs font-extrabold bg-blue-500/10 text-blue-400 border border-blue-500/30 px-3.5 py-1.5 rounded-xl">
+                {courses.length} Active Certification Courses
+              </span>
+            </div>
+
+            {/* Course Grid Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {courses.map((c) => (
+                <div
+                  key={c.id}
+                  className="bg-slate-800/80 border border-slate-700/80 hover:border-blue-500/80 rounded-2xl p-5 flex flex-col justify-between gap-4 transition-all shadow-lg hover:shadow-blue-500/10"
+                >
+                  <div className="space-y-3">
+                    <div className="relative aspect-video rounded-xl overflow-hidden border border-slate-700 bg-slate-900">
                       <img
                         src={c.imageUrl}
                         alt={c.title}
-                        className="w-20 h-20 object-cover rounded-lg shrink-0 border border-slate-200"
+                        className="w-full h-full object-cover"
                         referrerPolicy="no-referrer"
                       />
-                      <div className="flex-1 space-y-1.5 overflow-hidden">
-                        <div className="flex items-start justify-between gap-2">
-                          <h4 className="font-display font-bold text-xs text-slate-900 truncate">
-                            {c.title}
-                          </h4>
-                          <span className="text-xs font-extrabold text-slate-950 font-mono shrink-0">
-                            ${c.price}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed font-medium">
-                          {c.description}
-                        </p>
-                        <div className="pt-1 flex items-center justify-between">
-                          <span className="text-[10px] font-bold bg-purple-100 text-purple-800 px-2 py-0.5 rounded">
-                            {c.tags.find(t => t.text === 'O11' || t.text === 'ODC')?.text || 'O11'}
-                          </span>
-                          <button
-                            onClick={() => handleOpenCourseEditor(c)}
-                            className="flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800 cursor-pointer"
+                      <div className="absolute top-2 right-2 bg-slate-950/80 backdrop-blur-xs font-mono font-extrabold text-sm text-emerald-400 px-3 py-1 rounded-lg border border-emerald-500/30">
+                        ${c.price}
+                      </div>
+                      <div className="absolute bottom-2 left-2 flex gap-1.5">
+                        {c.tags.map((t, idx) => (
+                          <span
+                            key={idx}
+                            className={`text-[10px] font-extrabold px-2 py-0.5 rounded ${
+                              t.color === 'purple' ? 'bg-purple-900/80 text-purple-200 border border-purple-700' :
+                              t.color === 'orange' ? 'bg-amber-900/80 text-amber-200 border border-amber-700' :
+                              'bg-emerald-900/80 text-emerald-200 border border-emerald-700'
+                            }`}
                           >
-                            <Edit2 className="w-3.5 h-3.5" /> Edit Details
-                          </button>
-                        </div>
+                            {t.text}
+                          </span>
+                        ))}
                       </div>
                     </div>
-                  ))}
-                </div>
-              </div>
 
-              {/* COURSE EDITOR MODAL / PANEL */}
-              {editingCourse && (
-                <div className="bg-white border-2 border-blue-500 rounded-2xl p-6 shadow-xl space-y-4 animate-in zoom-in-95 duration-150">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                    <h4 className="font-display font-bold text-sm text-slate-900 flex items-center gap-2">
-                      <Edit2 className="w-4 h-4 text-blue-600" />
-                      Editing: {editingCourse.title}
-                    </h4>
-                    <button
-                      onClick={() => setEditingCourse(null)}
-                      className="text-slate-400 hover:text-slate-600 p-1"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
+                    <h3 className="font-display font-bold text-sm text-white line-clamp-1">
+                      {c.title}
+                    </h3>
+                    <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
+                      {c.description}
+                    </p>
                   </div>
 
-                  {courseSaveMsg && (
-                    <div className="bg-emerald-50 text-emerald-800 text-xs p-3 rounded-xl border border-emerald-200 font-bold">
-                      {courseSaveMsg}
-                    </div>
-                  )}
+                  <button
+                    onClick={() => handleOpenCourseEditor(c)}
+                    className="w-full bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/40 hover:border-blue-600 font-bold text-xs py-2.5 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" /> Edit Course Details
+                  </button>
+                </div>
+              ))}
+            </div>
 
-                  <form onSubmit={handleSaveCourseEdits} className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="md:col-span-2 space-y-1.5">
-                        <label className="text-xs font-bold text-slate-700">Course Title</label>
-                        <input
-                          type="text"
-                          required
-                          value={editTitle}
-                          onChange={(e) => setEditTitle(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 font-medium outline-none focus:border-blue-600"
-                        />
-                      </div>
+            {/* FULL-PAGE COURSE EDITOR DRAWER / PANEL */}
+            {editingCourse && (
+              <div className="bg-slate-800 border-2 border-blue-500 rounded-3xl p-6 shadow-2xl space-y-5 animate-in slide-in-from-bottom-4 duration-200">
+                <div className="flex items-center justify-between border-b border-slate-700 pb-4">
+                  <h3 className="font-display font-bold text-base text-white flex items-center gap-2">
+                    <Edit2 className="w-5 h-5 text-blue-400" />
+                    Editing Course: <span className="text-blue-300">{editingCourse.title}</span>
+                  </h3>
+                  <button
+                    onClick={() => setEditingCourse(null)}
+                    className="text-slate-400 hover:text-white p-1 hover:bg-slate-700 rounded-full"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
 
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-bold text-slate-700">Price ($ USD)</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          required
-                          value={editPrice}
-                          onChange={(e) => setEditPrice(parseFloat(e.target.value))}
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 font-mono font-bold outline-none focus:border-blue-600"
-                        />
-                      </div>
+                {courseSaveMsg && (
+                  <div className="bg-emerald-900/40 text-emerald-300 text-xs p-3 rounded-xl border border-emerald-500/50 font-bold flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" /> {courseSaveMsg}
+                  </div>
+                )}
+
+                <form onSubmit={handleSaveCourseEdits} className="space-y-5">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="md:col-span-2 space-y-1.5">
+                      <label className="text-xs font-bold text-slate-300">Course Title</label>
+                      <input
+                        type="text"
+                        required
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-white outline-none focus:border-blue-500 font-medium"
+                      />
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-700">Course Description</label>
-                      <textarea
-                        rows={2}
-                        value={editDescription}
-                        onChange={(e) => setEditDescription(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 font-medium outline-none focus:border-blue-600 leading-relaxed"
+                      <label className="text-xs font-bold text-slate-300">Price ($ USD)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        required
+                        value={editPrice}
+                        onChange={(e) => setEditPrice(parseFloat(e.target.value))}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-emerald-400 font-mono font-extrabold outline-none focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-300">Course Description</label>
+                    <textarea
+                      rows={3}
+                      value={editDescription}
+                      onChange={(e) => setEditDescription(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-slate-200 outline-none focus:border-blue-500 leading-relaxed"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                    <div className="md:col-span-2 space-y-1.5">
+                      <label className="text-xs font-bold text-slate-300">Cover Image URL</label>
+                      <input
+                        type="text"
+                        value={editImageUrl}
+                        onChange={(e) => setEditImageUrl(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-slate-300 font-mono outline-none focus:border-blue-500"
                       />
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
-                      <div className="md:col-span-2 space-y-1.5">
-                        <label className="text-xs font-bold text-slate-700">Image URL (Cover Photo)</label>
-                        <input
-                          type="text"
-                          value={editImageUrl}
-                          onChange={(e) => setEditImageUrl(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 font-mono outline-none focus:border-blue-600"
-                          placeholder="https://..."
-                        />
-                      </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-300">Platform Tag</label>
+                      <select
+                        value={editPlatform}
+                        onChange={(e) => setEditPlatform(e.target.value as 'O11' | 'ODC')}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-white font-bold outline-none focus:border-blue-500"
+                      >
+                        <option value="O11">O11 Platform</option>
+                        <option value="ODC">ODC Platform</option>
+                      </select>
+                    </div>
+                  </div>
 
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-bold text-slate-700">Platform Tag</label>
-                        <select
-                          value={editPlatform}
-                          onChange={(e) => setEditPlatform(e.target.value as 'O11' | 'ODC')}
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 font-bold outline-none focus:border-blue-600"
-                        >
-                          <option value="O11">O11 Platform</option>
-                          <option value="ODC">ODC Platform</option>
-                        </select>
+                  {/* Live Image Preview */}
+                  {editImageUrl && (
+                    <div className="p-4 bg-slate-900 border border-slate-700 rounded-2xl flex items-center gap-4">
+                      <img
+                        src={editImageUrl}
+                        alt="Live Cover Preview"
+                        className="w-24 h-16 object-cover rounded-xl border border-slate-700"
+                        onError={(e) => { (e.target as any).src = 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=600&auto=format&fit=crop&q=80'; }}
+                      />
+                      <div>
+                        <span className="text-xs font-bold text-slate-300">Live Cover Image Preview</span>
+                        <p className="text-[11px] text-slate-500 font-mono line-clamp-1">{editImageUrl}</p>
                       </div>
                     </div>
+                  )}
 
-                    {/* Image Live Preview Box */}
-                    {editImageUrl && (
-                      <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center gap-3">
-                        <img
-                          src={editImageUrl}
-                          alt="Live Preview"
-                          className="w-16 h-12 object-cover rounded-lg border"
-                          onError={(e) => { (e.target as any).src = 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=600&auto=format&fit=crop&q=80'; }}
-                        />
-                        <span className="text-xs text-slate-500 font-medium">Live Cover Image Preview</span>
-                      </div>
-                    )}
+                  <div className="flex justify-end gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditingCourse(null)}
+                      className="bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold px-5 py-2.5 rounded-xl text-xs"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-6 py-2.5 rounded-xl text-xs shadow-lg"
+                    >
+                      Save & Sync to Supabase
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+          </div>
+        )}
 
-                    <div className="flex justify-end gap-2 pt-2">
-                      <button
-                        type="button"
-                        onClick={() => setEditingCourse(null)}
-                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-2 rounded-xl text-xs"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="submit"
-                        className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2 rounded-xl text-xs shadow-xs"
-                      >
-                        Save Course Changes
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              )}
-            </div>
-          )}
+        {/* TAB 2: PAYMENTS & CODE GENERATOR */}
+        {activeTab === 'payments' && (
+          <div className="space-y-6">
+            <h2 className="font-display font-extrabold text-xl text-white flex items-center gap-2.5">
+              <Mail className="w-6 h-6 text-blue-400" />
+              Payments & Manual Activation Code Generator
+            </h2>
 
-          {/* TAB 2: PAYMENTS & ACTIVATION CODE GENERATOR */}
-          {activeTab === 'payments' && (
-            <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Code Generator Form */}
-              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
-                <h3 className="font-display font-bold text-base text-slate-900 flex items-center gap-2">
-                  <Key className="w-5 h-5 text-amber-500" />
-                  Manual Activation Code Generator
+              <div className="bg-slate-800 border border-slate-700 rounded-2xl p-5 space-y-4">
+                <h3 className="font-display font-bold text-sm text-white flex items-center gap-2">
+                  <Key className="w-4 h-4 text-amber-400" /> Issue New Activation Code
                 </h3>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <input
-                    type="email"
-                    placeholder="Student Email (e.g. student@gmail.com)"
-                    value={genEmail}
-                    onChange={(e) => setGenEmail(e.target.value)}
-                    className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 outline-none focus:border-blue-600 font-medium"
-                  />
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-400">Student Email</label>
+                    <input
+                      type="email"
+                      placeholder="student@gmail.com"
+                      value={genEmail}
+                      onChange={(e) => setGenEmail(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none focus:border-blue-500 font-medium"
+                    />
+                  </div>
 
-                  <select
-                    value={genCourseId}
-                    onChange={(e) => setGenCourseId(e.target.value)}
-                    className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 outline-none focus:border-blue-600 font-medium"
-                  >
-                    {courses.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.title}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-400">Select Target Course</label>
+                    <select
+                      value={genCourseId}
+                      onChange={(e) => setGenCourseId(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none focus:border-blue-500 font-medium"
+                    >
+                      {courses.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.title}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
                   <button
                     onClick={() => handleGenerateCode(genEmail, genCourseId)}
                     disabled={!genEmail}
-                    className={`font-bold text-xs py-2.5 px-4 rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5 ${
+                    className={`w-full font-bold text-xs py-3 px-4 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 ${
                       genEmail
-                        ? 'bg-blue-600 hover:bg-blue-700 text-white cursor-pointer'
-                        : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
+                        ? 'bg-blue-600 hover:bg-blue-500 text-white cursor-pointer'
+                        : 'bg-slate-700 text-slate-500 cursor-not-allowed'
                     }`}
                   >
                     <Sparkles className="w-4 h-4" /> Generate Code
                   </button>
-                </div>
 
-                {generatedCodeResult && (
-                  <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl flex items-center justify-between gap-4 animate-in fade-in duration-200">
-                    <div className="space-y-1">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+                  {generatedCodeResult && (
+                    <div className="bg-emerald-950/60 border border-emerald-500/50 p-4 rounded-xl space-y-2 animate-in fade-in duration-200">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">
                         Generated Activation Code:
                       </span>
-                      <p className="font-mono font-bold text-sm text-emerald-950">
-                        {generatedCodeResult}
-                      </p>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-mono font-extrabold text-sm text-emerald-200 select-all">
+                          {generatedCodeResult}
+                        </p>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(generatedCodeResult);
+                            setCopiedCode(true);
+                            setTimeout(() => setCopiedCode(false), 2000);
+                          }}
+                          className="bg-emerald-900 hover:bg-emerald-800 text-emerald-200 text-xs px-2.5 py-1 rounded-lg flex items-center gap-1 border border-emerald-700 cursor-pointer"
+                        >
+                          {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                          <span>{copiedCode ? 'Copied' : 'Copy'}</span>
+                        </button>
+                      </div>
                     </div>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(generatedCodeResult);
-                        setCopiedCode(true);
-                        setTimeout(() => setCopiedCode(false), 2000);
-                      }}
-                      className="bg-white border border-emerald-300 hover:bg-emerald-100 text-emerald-800 font-bold text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
-                    >
-                      {copiedCode ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-                      <span>{copiedCode ? 'Copied!' : 'Copy Code'}</span>
-                    </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
 
-              {/* Payment Requests List */}
-              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
-                <h3 className="font-display font-bold text-base text-slate-900 flex items-center gap-2">
-                  <Mail className="w-5 h-5 text-blue-600" />
-                  Incoming Payment Requests ({paymentRequests.length})
+              {/* Payment Requests Table */}
+              <div className="lg:col-span-2 bg-slate-800 border border-slate-700 rounded-2xl p-5 space-y-4">
+                <h3 className="font-display font-bold text-sm text-white flex items-center gap-2">
+                  <Mail className="w-4 h-4 text-blue-400" />
+                  Payment Requests ({paymentRequests.length})
                 </h3>
 
-                <div className="space-y-3">
+                <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
                   {paymentRequests.length > 0 ? (
                     paymentRequests.map((req) => (
                       <div
                         key={req.id}
-                        className="bg-slate-50 border border-slate-200 p-4 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3"
+                        className="bg-slate-900 border border-slate-700 p-4 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3"
                       >
                         <div className="space-y-1">
                           <div className="flex items-center gap-2">
-                            <span className="font-bold text-xs text-slate-900">{req.userEmail}</span>
-                            <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded">
+                            <span className="font-bold text-xs text-white">{req.userEmail}</span>
+                            <span className="text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded">
                               {req.status}
                             </span>
                           </div>
-                          <p className="text-xs text-slate-600 font-medium">{req.courseTitle}</p>
-                          <p className="text-[11px] text-slate-400 font-mono">
-                            Requested on: {new Date(req.createdAt).toLocaleString()}
+                          <p className="text-xs text-slate-300 font-medium">{req.courseTitle}</p>
+                          <p className="text-[11px] text-slate-500 font-mono">
+                            Requested: {new Date(req.createdAt).toLocaleString()}
                           </p>
                         </div>
 
@@ -721,238 +834,261 @@ export default function AdminDashboard({
                             setGenCourseId(req.courseId);
                             handleGenerateCode(req.userEmail, req.courseId);
                           }}
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-2xs transition-colors cursor-pointer"
+                          className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-md cursor-pointer shrink-0"
                         >
-                          Issue Activation Code
+                          Issue Code
                         </button>
                       </div>
                     ))
                   ) : (
-                    <p className="text-xs text-slate-500 italic text-center py-4">
+                    <p className="text-xs text-slate-500 italic text-center py-8">
                       No pending payment requests yet.
                     </p>
                   )}
                 </div>
               </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {/* TAB 3: QUESTION BANK & CSV IMPORT */}
-          {activeTab === 'questions' && (
-            <div className="space-y-6">
-              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                  <div>
-                    <h3 className="font-display font-bold text-base text-slate-900">
-                      Manage Exam Questions
-                    </h3>
-                    <p className="text-xs text-slate-500 font-medium mt-0.5">
-                      Select course to view, edit, or add dump questions
-                    </p>
+        {/* TAB 3: QUESTION BANK & MULTI-FORMAT CSV IMPORTER */}
+        {activeTab === 'questions' && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="font-display font-extrabold text-xl text-white flex items-center gap-2.5">
+                  <FileSpreadsheet className="w-6 h-6 text-blue-400" />
+                  Question Bank & Multi-Format CSV Importer
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  Supports standard CSV dumps and Delivery/RBT/1.csv option-explanation format.
+                </p>
+              </div>
+
+              <select
+                value={selectedCourseId}
+                onChange={(e) => setSelectedCourseId(e.target.value)}
+                className="bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white font-bold outline-none focus:border-blue-500"
+              >
+                {courses.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.title} ({c.mockExam?.length || 0} questions)
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* CSV Import Box */}
+            <div className="bg-slate-800 border border-slate-700 p-5 rounded-2xl space-y-4">
+              <h3 className="font-display font-bold text-xs text-white flex items-center gap-2">
+                <Upload className="w-4 h-4 text-blue-400" /> Batch Paste CSV Content
+              </h3>
+              <textarea
+                rows={3}
+                placeholder={`Paste your CSV lines here (Supports standard CSV or Question,Question Type,Answer Option 1,Explanation 1... format)`}
+                value={csvContent}
+                onChange={(e) => setCsvContent(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-slate-200 outline-none font-mono focus:border-blue-500 leading-relaxed"
+              />
+              {csvMessage && <p className="text-xs font-bold text-emerald-400">{csvMessage}</p>}
+              <button
+                onClick={handleImportCsv}
+                className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs py-2.5 px-5 rounded-xl shadow-md cursor-pointer"
+              >
+                Import CSV Questions
+              </button>
+            </div>
+
+            {/* Questions Table & Search */}
+            <div className="bg-slate-800 border border-slate-700 p-5 rounded-2xl space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-700 pb-3">
+                <h3 className="font-display font-bold text-xs text-slate-300">
+                  Questions for <span className="text-white">{selectedCourse.title}</span> ({selectedCourse.mockExam?.length || 0})
+                </h3>
+
+                <div className="flex items-center gap-3 w-full sm:w-auto">
+                  <div className="relative flex-1 sm:w-64">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      placeholder="Filter questions..."
+                      value={searchQuestionQuery}
+                      onChange={(e) => setSearchQuestionQuery(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white outline-none focus:border-blue-500"
+                    />
                   </div>
-
-                  <select
-                    value={selectedCourseId}
-                    onChange={(e) => setSelectedCourseId(e.target.value)}
-                    className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 font-bold outline-none focus:border-blue-600"
-                  >
-                    {courses.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.title} ({c.mockExam?.length || 0} questions)
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* CSV Import */}
-                <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl space-y-3">
-                  <h4 className="font-display font-bold text-xs text-slate-900 flex items-center gap-1.5">
-                    <Upload className="w-4 h-4 text-blue-600" /> Batch CSV Import Questions
-                  </h4>
-                  <textarea
-                    rows={2}
-                    placeholder='Question,"Choice A","Choice B","Choice C","Choice D","CorrectKey","Explanation"'
-                    value={csvContent}
-                    onChange={(e) => setCsvContent(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 outline-none font-mono"
-                  />
-                  {csvMessage && <p className="text-xs font-bold text-emerald-700">{csvMessage}</p>}
                   <button
-                    onClick={handleImportCsv}
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-2 px-4 rounded-xl shadow-2xs cursor-pointer"
+                    onClick={() => {
+                      setEditingQuestion(null);
+                      setQText('');
+                      setChoiceA('');
+                      setChoiceB('');
+                      setChoiceC('');
+                      setChoiceD('');
+                      setExplanationText('');
+                      setImgUrl('');
+                    }}
+                    className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1 cursor-pointer shrink-0"
                   >
-                    Import CSV Questions
+                    <Plus className="w-4 h-4" /> Add Question
                   </button>
                 </div>
+              </div>
 
-                {/* Questions List */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between border-b pb-2">
-                    <h4 className="font-display font-bold text-xs text-slate-700">
-                      Questions for {selectedCourse.title} ({selectedCourse.mockExam?.length || 0})
-                    </h4>
-                    <button
-                      onClick={() => {
-                        setEditingQuestion(null);
-                        setQText('');
-                        setChoiceA('');
-                        setChoiceB('');
-                        setChoiceC('');
-                        setChoiceD('');
-                        setExplanationText('');
-                        setImgUrl('');
-                      }}
-                      className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 cursor-pointer"
+              <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+                {filteredQuestions.length > 0 ? (
+                  filteredQuestions.map((q, idx) => (
+                    <div
+                      key={q.id}
+                      className="bg-slate-900 border border-slate-700/80 p-4 rounded-xl text-xs flex justify-between items-start gap-4 hover:border-slate-600 transition-all"
                     >
-                      <Plus className="w-3.5 h-3.5" /> Add Question
+                      <div className="space-y-2">
+                        <p className="font-bold text-slate-100 leading-relaxed">
+                          {idx + 1}. {q.question}
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-400">
+                          {q.choices.map((c) => (
+                            <div
+                              key={c.key}
+                              className={`p-2 rounded-lg border ${
+                                c.key === q.correctAnswer
+                                  ? 'bg-emerald-950/60 border-emerald-500/50 text-emerald-300 font-bold'
+                                  : 'bg-slate-950/50 border-slate-800 text-slate-400'
+                              }`}
+                            >
+                              <span className="font-mono font-bold mr-1.5">{c.key}.</span> {c.text}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2 shrink-0">
+                        <button
+                          onClick={() => handleOpenEditModal(q)}
+                          className="text-blue-400 hover:text-blue-200 p-1.5 hover:bg-slate-800 rounded-lg"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteQuestion(q.id)}
+                          className="text-red-400 hover:text-red-200 p-1.5 hover:bg-slate-800 rounded-lg"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-xs text-slate-500 italic text-center py-8">
+                    No questions found in this course bank.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 4: GMAIL & TELEGRAM NOTIFICATION ALERTS */}
+        {activeTab === 'notifications' && (
+          <div className="space-y-6">
+            <h2 className="font-display font-extrabold text-xl text-white flex items-center gap-2.5">
+              <BellRing className="w-6 h-6 text-amber-400" />
+              Dual Notification Alerts (Gmail SMTP & Telegram Bot)
+            </h2>
+
+            <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 space-y-6">
+              {notifStatusMsg && (
+                <div className="bg-blue-900/40 text-blue-300 text-xs p-4 rounded-xl border border-blue-500/50 font-bold">
+                  {notifStatusMsg}
+                </div>
+              )}
+
+              <form onSubmit={handleSaveNotificationSettings} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Gmail Settings */}
+                  <div className="bg-slate-900 p-5 rounded-2xl border border-slate-700 space-y-4">
+                    <h3 className="font-display font-bold text-sm text-white flex items-center gap-2">
+                      <Mail className="w-4 h-4 text-red-400" /> Gmail SMTP Configuration
+                    </h3>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-300">Admin Gmail Address</label>
+                      <input
+                        type="email"
+                        value={adminEmailSetting}
+                        onChange={(e) => setAdminEmailSetting(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white font-mono outline-none focus:border-blue-500"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-300">Gmail App Password (16 chars)</label>
+                      <input
+                        type="password"
+                        value={gmailAppPassword}
+                        onChange={(e) => setGmailAppPassword(e.target.value)}
+                        placeholder="xxxx xxxx xxxx xxxx"
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white font-mono outline-none focus:border-blue-500"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleTestEmail}
+                      disabled={testingEmail}
+                      className="bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white font-bold text-xs py-2 px-4 rounded-xl flex items-center gap-2 transition-colors cursor-pointer"
+                    >
+                      <Send className="w-4 h-4 text-blue-400" />
+                      <span>{testingEmail ? 'Sending...' : 'Test Gmail Alert'}</span>
                     </button>
                   </div>
 
-                  <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                    {selectedCourse.mockExam && selectedCourse.mockExam.length > 0 ? (
-                      selectedCourse.mockExam.map((q, idx) => (
-                        <div
-                          key={q.id}
-                          className="bg-slate-50 border border-slate-200 p-3 rounded-xl text-xs flex justify-between items-start gap-3"
-                        >
-                          <div>
-                            <p className="font-bold text-slate-900">
-                              {idx + 1}. {q.question}
-                            </p>
-                            <p className="text-[11px] text-slate-500 mt-1">
-                              Correct Choice: <strong className="text-emerald-700">{q.correctAnswer}</strong>
-                            </p>
-                          </div>
-
-                          <div className="flex gap-2 shrink-0">
-                            <button
-                              onClick={() => handleOpenEditModal(q)}
-                              className="text-blue-600 hover:text-blue-800 p-1"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteQuestion(q.id)}
-                              className="text-red-600 hover:text-red-800 p-1"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-xs text-slate-400 italic text-center py-4">
-                        No questions in this course bank.
-                      </p>
-                    )}
+                  {/* Telegram Settings */}
+                  <div className="bg-slate-900 p-5 rounded-2xl border border-slate-700 space-y-4">
+                    <h3 className="font-display font-bold text-sm text-white flex items-center gap-2">
+                      <BellRing className="w-4 h-4 text-blue-400" /> Telegram Bot Configuration
+                    </h3>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-300">Telegram Bot Token</label>
+                      <input
+                        type="password"
+                        value={telegramBotToken}
+                        onChange={(e) => setTelegramBotToken(e.target.value)}
+                        placeholder="123456789:ABCdef..."
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white font-mono outline-none focus:border-blue-500"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-300">Telegram Chat ID</label>
+                      <input
+                        type="text"
+                        value={telegramChatId}
+                        onChange={(e) => setTelegramChatId(e.target.value)}
+                        placeholder="987654321"
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white font-mono outline-none focus:border-blue-500"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleTestTelegram}
+                      disabled={testingTelegram}
+                      className="bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white font-bold text-xs py-2 px-4 rounded-xl flex items-center gap-2 transition-colors cursor-pointer"
+                    >
+                      <Send className="w-4 h-4 text-blue-400" />
+                      <span>{testingTelegram ? 'Sending...' : 'Test Telegram Alert'}</span>
+                    </button>
                   </div>
                 </div>
-              </div>
+
+                <button
+                  type="submit"
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs py-3 px-6 rounded-xl shadow-lg cursor-pointer"
+                >
+                  Save Notification Settings
+                </button>
+              </form>
             </div>
-          )}
+          </div>
+        )}
 
-          {/* TAB 4: GMAIL & TELEGRAM NOTIFICATION SETTINGS */}
-          {activeTab === 'notifications' && (
-            <div className="space-y-6">
-              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
-                <h3 className="font-display font-bold text-base text-slate-900 flex items-center gap-2">
-                  <BellRing className="w-5 h-5 text-amber-500" />
-                  Dual Notification Settings (Gmail App Password & Telegram Bot)
-                </h3>
-
-                {notifStatusMsg && (
-                  <div className="bg-blue-50 text-blue-800 text-xs p-3 rounded-xl border border-blue-200 font-bold">
-                    {notifStatusMsg}
-                  </div>
-                )}
-
-                <form onSubmit={handleSaveNotificationSettings} className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Gmail Settings */}
-                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
-                      <h4 className="font-display font-bold text-xs text-slate-900 flex items-center gap-1.5">
-                        <Mail className="w-4 h-4 text-red-600" /> Gmail SMTP Configuration
-                      </h4>
-                      <div className="space-y-1.5">
-                        <label className="text-[11px] font-bold text-slate-700">Admin Gmail Address</label>
-                        <input
-                          type="email"
-                          value={adminEmailSetting}
-                          onChange={(e) => setAdminEmailSetting(e.target.value)}
-                          className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 font-mono outline-none focus:border-blue-600"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-[11px] font-bold text-slate-700">Gmail App Password (16 chars)</label>
-                        <input
-                          type="password"
-                          value={gmailAppPassword}
-                          onChange={(e) => setGmailAppPassword(e.target.value)}
-                          placeholder="xxxx xxxx xxxx xxxx"
-                          className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 font-mono outline-none focus:border-blue-600"
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleTestEmail}
-                        disabled={testingEmail}
-                        className="bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 font-bold text-xs py-1.5 px-3 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
-                      >
-                        <Send className="w-3.5 h-3.5 text-blue-600" />
-                        <span>{testingEmail ? 'Sending...' : 'Test Gmail Alert'}</span>
-                      </button>
-                    </div>
-
-                    {/* Telegram Settings */}
-                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
-                      <h4 className="font-display font-bold text-xs text-slate-900 flex items-center gap-1.5">
-                        <MessageSquare className="w-4 h-4 text-blue-500" /> Telegram Bot Configuration
-                      </h4>
-                      <div className="space-y-1.5">
-                        <label className="text-[11px] font-bold text-slate-700">Telegram Bot Token</label>
-                        <input
-                          type="password"
-                          value={telegramBotToken}
-                          onChange={(e) => setTelegramBotToken(e.target.value)}
-                          placeholder="123456789:ABCdef..."
-                          className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 font-mono outline-none focus:border-blue-600"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-[11px] font-bold text-slate-700">Telegram Chat ID</label>
-                        <input
-                          type="text"
-                          value={telegramChatId}
-                          onChange={(e) => setTelegramChatId(e.target.value)}
-                          placeholder="987654321"
-                          className="w-full bg-white border border-slate-200 rounded-xl p-2 text-xs text-slate-900 font-mono outline-none focus:border-blue-600"
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleTestTelegram}
-                        disabled={testingTelegram}
-                        className="bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 font-bold text-xs py-1.5 px-3 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
-                      >
-                        <Send className="w-3.5 h-3.5 text-blue-600" />
-                        <span>{testingTelegram ? 'Sending...' : 'Test Telegram Alert'}</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-2.5 px-5 rounded-xl shadow-xs transition-all cursor-pointer"
-                  >
-                    Save Notification Settings
-                  </button>
-                </form>
-              </div>
-            </div>
-          )}
-
-        </div>
-      </div>
+      </main>
     </div>
   );
 }
