@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Course, MockExamQuestion, PaymentRequest, ActivationCode } from '../types';
 import {
   X,
@@ -24,7 +24,9 @@ import {
   CheckCircle2,
   Trash2,
   RefreshCw,
-  FolderPlus
+  FolderPlus,
+  Download,
+  AlertTriangle
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -74,9 +76,10 @@ export default function AdminDashboard({
   const [editIsNew, setEditIsNew] = useState(false);
   const [courseSaveMsg, setCourseSaveMsg] = useState('');
 
-  // CSV Import state
-  const [csvContent, setCsvContent] = useState('');
+  // CSV Import & Confirmation Modal State
+  const [isConfirmImportOpen, setIsConfirmImportOpen] = useState(false);
   const [csvMessage, setCsvMessage] = useState('');
+  const csvFileInputRef = useRef<HTMLInputElement>(null);
 
   // Notification Settings State
   const [adminEmailSetting, setAdminEmailSetting] = useState('duongrbt@gmail.com');
@@ -367,113 +370,136 @@ export default function AdminDashboard({
     onUpdateCourses(updatedCourses);
   };
 
-  // ENHANCED CSV PARSER (Clears old questions, creating fresh question bank)
-  const handleImportCsv = () => {
-    if (!csvContent.trim()) return;
+  // DOWNLOAD CSV TEMPLATE (Item 2)
+  const handleDownloadTemplate = () => {
+    const templateHeader = "Question,Question Type,Answer Option 1,Explanation 1,Answer Option 2,Explanation 2,Answer Option 3,Explanation 3,Answer Option 4,Explanation 4,Answer Option 5,Explanation 5,Answer Option 6,Explanation 6,Correct Answers,Overall Explanation,Domain\n";
+    const sampleRow = '"What is an important decision for a delivery specialist regarding positioning in the organization?",multiple-choice,"Whether to be seen as a driver for improvements",,"Whether to ignore customer concerns",,"Whether to avoid all non-technical discussions",,"Whether to delegate all communication to the IT manager",,,,,,1,"Official OutSystems Explanation","OutSystems Delivery Specialist"\n';
     
-    const parseLineCells = (line: string) => {
-      const cells: string[] = [];
-      let cell = '';
-      let insideQuotes = false;
-      for (let i = 0; i < line.length; i++) {
-        const c = line[i];
-        if (c === '"') {
-          insideQuotes = !insideQuotes;
-        } else if (c === ',' && !insideQuotes) {
-          cells.push(cell.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
-          cell = '';
+    const blob = new Blob([templateHeader + sampleRow], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'TemplateOSDump.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // FILE SELECTION CSV IMPORT (Item 3)
+  const handleCsvFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const csvText = event.target?.result as string;
+      if (!csvText) return;
+
+      const parseLineCells = (line: string) => {
+        const cells: string[] = [];
+        let cell = '';
+        let insideQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+          const c = line[i];
+          if (c === '"') {
+            insideQuotes = !insideQuotes;
+          } else if (c === ',' && !insideQuotes) {
+            cells.push(cell.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
+            cell = '';
+          } else {
+            cell += c;
+          }
+        }
+        cells.push(cell.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
+        return cells;
+      };
+
+      const rawLines = csvText.split('\n').filter((l) => l.trim() !== '');
+      if (rawLines.length < 2) {
+        setCsvMessage('Invalid CSV file: At least 2 lines (header + data row) required.');
+        return;
+      }
+
+      const headerCells = parseLineCells(rawLines[0]).map(h => h.toLowerCase());
+      const newQuestions: MockExamQuestion[] = [];
+
+      for (let i = 1; i < rawLines.length; i++) {
+        const cells = parseLineCells(rawLines[i]);
+        if (cells.length < 2) continue;
+
+        const questionText = cells[0];
+        if (!questionText || questionText.toLowerCase() === 'question') continue;
+
+        const choices: { key: string; text: string }[] = [];
+        let correctKey = 'A';
+        let explanation = 'Official OutSystems Exam Question';
+
+        const opt1Idx = headerCells.findIndex(h => h.includes('answer option 1') || h === 'choice a' || h === 'option a');
+        const opt2Idx = headerCells.findIndex(h => h.includes('answer option 2') || h === 'choice b' || h === 'option b');
+        const opt3Idx = headerCells.findIndex(h => h.includes('answer option 3') || h === 'choice c' || h === 'option c');
+        const opt4Idx = headerCells.findIndex(h => h.includes('answer option 4') || h === 'choice d' || h === 'option d');
+        const correctIdx = headerCells.findIndex(h => h.includes('correct answer') || h.includes('correctanswers') || h.includes('correct'));
+        const expIdx = headerCells.findIndex(h => h.includes('overall explanation') || h.includes('explanation'));
+
+        if (opt1Idx !== -1 && opt2Idx !== -1) {
+          if (cells[opt1Idx]) choices.push({ key: 'A', text: cells[opt1Idx] });
+          if (cells[opt2Idx]) choices.push({ key: 'B', text: cells[opt2Idx] });
+          if (opt3Idx !== -1 && cells[opt3Idx]) choices.push({ key: 'C', text: cells[opt3Idx] });
+          if (opt4Idx !== -1 && cells[opt4Idx]) choices.push({ key: 'D', text: cells[opt4Idx] });
+
+          if (correctIdx !== -1 && cells[correctIdx]) {
+            const rawAns = cells[correctIdx].trim();
+            const num = parseInt(rawAns, 10);
+            if (num === 1) correctKey = 'A';
+            else if (num === 2) correctKey = 'B';
+            else if (num === 3) correctKey = 'C';
+            else if (num === 4) correctKey = 'D';
+            else if (['A', 'B', 'C', 'D'].includes(rawAns.toUpperCase())) correctKey = rawAns.toUpperCase();
+          }
+
+          if (expIdx !== -1 && cells[expIdx]) {
+            explanation = cells[expIdx];
+          }
         } else {
-          cell += c;
+          if (cells[1]) choices.push({ key: 'A', text: cells[1] });
+          if (cells[2]) choices.push({ key: 'B', text: cells[2] });
+          if (cells[3]) choices.push({ key: 'C', text: cells[3] });
+          if (cells[4]) choices.push({ key: 'D', text: cells[4] });
+
+          if (cells[5]) {
+            correctKey = cells[5].trim().toUpperCase();
+          }
+          if (cells[6]) explanation = cells[6];
+        }
+
+        if (questionText && choices.length >= 2) {
+          newQuestions.push({
+            id: `csv_q_${Date.now()}_${i}`,
+            question: questionText,
+            choices: choices,
+            correctAnswer: correctKey,
+            explanation: explanation
+          });
         }
       }
-      cells.push(cell.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
-      return cells;
-    };
 
-    const rawLines = csvContent.split('\n').filter((l) => l.trim() !== '');
-    if (rawLines.length < 2) {
-      setCsvMessage('Invalid CSV content: At least 2 lines (header + row) required.');
-      return;
-    }
-
-    const headerCells = parseLineCells(rawLines[0]).map(h => h.toLowerCase());
-    const newQuestions: MockExamQuestion[] = [];
-
-    for (let i = 1; i < rawLines.length; i++) {
-      const cells = parseLineCells(rawLines[i]);
-      if (cells.length < 2) continue;
-
-      const questionText = cells[0];
-      if (!questionText || questionText.toLowerCase() === 'question') continue;
-
-      const choices: { key: string; text: string }[] = [];
-      let correctKey = 'A';
-      let explanation = 'Official OutSystems Exam Question';
-
-      const opt1Idx = headerCells.findIndex(h => h.includes('answer option 1') || h === 'choice a' || h === 'option a');
-      const opt2Idx = headerCells.findIndex(h => h.includes('answer option 2') || h === 'choice b' || h === 'option b');
-      const opt3Idx = headerCells.findIndex(h => h.includes('answer option 3') || h === 'choice c' || h === 'option c');
-      const opt4Idx = headerCells.findIndex(h => h.includes('answer option 4') || h === 'choice d' || h === 'option d');
-      const correctIdx = headerCells.findIndex(h => h.includes('correct answer') || h.includes('correctanswers') || h.includes('correct'));
-      const expIdx = headerCells.findIndex(h => h.includes('overall explanation') || h.includes('explanation'));
-
-      if (opt1Idx !== -1 && opt2Idx !== -1) {
-        if (cells[opt1Idx]) choices.push({ key: 'A', text: cells[opt1Idx] });
-        if (cells[opt2Idx]) choices.push({ key: 'B', text: cells[opt2Idx] });
-        if (opt3Idx !== -1 && cells[opt3Idx]) choices.push({ key: 'C', text: cells[opt3Idx] });
-        if (opt4Idx !== -1 && cells[opt4Idx]) choices.push({ key: 'D', text: cells[opt4Idx] });
-
-        if (correctIdx !== -1 && cells[correctIdx]) {
-          const rawAns = cells[correctIdx].trim();
-          const num = parseInt(rawAns, 10);
-          if (num === 1) correctKey = 'A';
-          else if (num === 2) correctKey = 'B';
-          else if (num === 3) correctKey = 'C';
-          else if (num === 4) correctKey = 'D';
-          else if (['A', 'B', 'C', 'D'].includes(rawAns.toUpperCase())) correctKey = rawAns.toUpperCase();
-        }
-
-        if (expIdx !== -1 && cells[expIdx]) {
-          explanation = cells[expIdx];
-        }
-      } else {
-        if (cells[1]) choices.push({ key: 'A', text: cells[1] });
-        if (cells[2]) choices.push({ key: 'B', text: cells[2] });
-        if (cells[3]) choices.push({ key: 'C', text: cells[3] });
-        if (cells[4]) choices.push({ key: 'D', text: cells[4] });
-
-        if (cells[5]) {
-          correctKey = cells[5].trim().toUpperCase();
-        }
-        if (cells[6]) explanation = cells[6];
-      }
-
-      if (questionText && choices.length >= 2) {
-        newQuestions.push({
-          id: `csv_q_${Date.now()}_${i}`,
-          question: questionText,
-          choices: choices,
-          correctAnswer: correctKey,
-          explanation: explanation
+      if (newQuestions.length > 0) {
+        // REPLACES ALL OLD QUESTIONS WITH FRESH NEW CSV QUESTIONS
+        const updatedCourses = courses.map((c) => {
+          if (c.id === selectedCourseId) {
+            return { ...c, mockExam: newQuestions };
+          }
+          return c;
         });
+
+        onUpdateCourses(updatedCourses);
+        setCsvMessage(`✅ Successfully cleared old data & imported ${newQuestions.length} fresh questions from "${file.name}"!`);
+      } else {
+        setCsvMessage('Could not parse questions. Check CSV columns format.');
       }
-    }
-
-    if (newQuestions.length > 0) {
-      // REPLACES ALL OLD QUESTIONS WITH FRESH NEW CSV QUESTIONS
-      const updatedCourses = courses.map((c) => {
-        if (c.id === selectedCourseId) {
-          return { ...c, mockExam: newQuestions };
-        }
-        return c;
-      });
-
-      onUpdateCourses(updatedCourses);
-      setCsvMessage(`Successfully cleared old data & imported ${newQuestions.length} fresh questions!`);
-      setCsvContent('');
-    } else {
-      setCsvMessage('Could not parse questions. Check CSV columns format.');
-    }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
   };
 
   const selectedCourse = courses.find((c) => c.id === selectedCourseId) || courses[0];
@@ -567,6 +593,15 @@ export default function AdminDashboard({
           </button>
         </div>
       </header>
+
+      {/* Hidden File Input for CSV File Selection */}
+      <input
+        type="file"
+        ref={csvFileInputRef}
+        accept=".csv"
+        className="hidden"
+        onChange={handleCsvFileSelected}
+      />
 
       {/* Main Full-Screen Workspace */}
       <main className="flex-1 w-full max-w-7xl mx-auto p-6 space-y-8">
@@ -775,17 +810,17 @@ export default function AdminDashboard({
           </div>
         )}
 
-        {/* TAB 3: QUESTION BANK & MULTI-FORMAT CSV IMPORTER */}
+        {/* TAB 3: QUESTION BANK & CSV FILE IMPORTER */}
         {activeTab === 'questions' && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
                 <h2 className="font-display font-extrabold text-xl text-white flex items-center gap-2.5">
                   <FileSpreadsheet className="w-6 h-6 text-blue-400" />
-                  Question Bank & Multi-Format CSV Importer
+                  Question Bank & CSV File Importer
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">
-                  Upload CSV clears old questions and populates new questions fresh.
+                  Import CSV files from your computer or download TemplateOSDump.csv format.
                 </p>
               </div>
 
@@ -802,25 +837,44 @@ export default function AdminDashboard({
               </select>
             </div>
 
-            {/* CSV Import Box */}
+            {/* CSV Action Controls Box (Item 1, 2, 3) */}
             <div className="bg-slate-800 border border-slate-700 p-5 rounded-2xl space-y-4">
-              <h3 className="font-display font-bold text-xs text-white flex items-center gap-2">
-                <Upload className="w-4 h-4 text-blue-400" /> Batch Paste CSV Content (Replaces Old Questions)
-              </h3>
-              <textarea
-                rows={3}
-                placeholder={`Paste your CSV lines here (Supports standard CSV or Question,Question Type,Answer Option 1,Explanation 1... format)`}
-                value={csvContent}
-                onChange={(e) => setCsvContent(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-slate-200 outline-none font-mono focus:border-blue-500 leading-relaxed"
-              />
-              {csvMessage && <p className="text-xs font-bold text-emerald-400">{csvMessage}</p>}
-              <button
-                onClick={handleImportCsv}
-                className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs py-2.5 px-5 rounded-xl shadow-md cursor-pointer"
-              >
-                Import CSV Questions & Replace Old Data
-              </button>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div>
+                  <h3 className="font-display font-bold text-sm text-white flex items-center gap-2">
+                    <Upload className="w-4 h-4 text-blue-400" /> CSV Question Import & Template Download
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Target Course: <strong className="text-blue-300">{selectedCourse.title}</strong>
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Download Template Button (Item 2) */}
+                  <button
+                    onClick={handleDownloadTemplate}
+                    className="bg-slate-700 hover:bg-slate-600 border border-slate-600 text-slate-200 font-bold text-xs py-2.5 px-4 rounded-xl flex items-center gap-2 transition-all cursor-pointer shadow-sm"
+                  >
+                    <Download className="w-4 h-4 text-emerald-400" />
+                    <span>Download CSV Template</span>
+                  </button>
+
+                  {/* Import Questions Button with Confirmation Popup (Item 3) */}
+                  <button
+                    onClick={() => setIsConfirmImportOpen(true)}
+                    className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs py-2.5 px-5 rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                  >
+                    <Upload className="w-4 h-4" />
+                    <span>Import Questions</span>
+                  </button>
+                </div>
+              </div>
+
+              {csvMessage && (
+                <div className="bg-slate-900 border border-slate-700 p-3 rounded-xl text-xs font-bold text-emerald-400 animate-in fade-in">
+                  {csvMessage}
+                </div>
+              )}
             </div>
 
             {/* Questions Table & Search */}
@@ -1014,7 +1068,57 @@ export default function AdminDashboard({
       </main>
 
       {/* ========================================================================= */}
-      {/* POPUP MODAL 1: COURSE EDIT MODAL OVERLAY (Point 3 & 5)                    */}
+      {/* POPUP MODAL 1: CONFIRMATION MODAL FOR CSV IMPORT (Item 3)                 */}
+      {/* ========================================================================= */}
+      {isConfirmImportOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 border border-slate-700 rounded-3xl w-full max-w-lg shadow-2xl p-6 space-y-5 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-amber-500/20 text-amber-400 rounded-2xl flex items-center justify-center font-bold border border-amber-500/30 shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-display font-bold text-base text-white">Confirm Question Bank Replacement</h3>
+                <p className="text-xs text-slate-400">Course: <span className="text-blue-300 font-bold">{selectedCourse.title}</span></p>
+              </div>
+            </div>
+
+            <div className="bg-slate-900 border border-slate-700/80 p-4 rounded-2xl text-xs text-slate-300 space-y-2 leading-relaxed">
+              <p className="font-bold text-amber-300 flex items-center gap-1.5">
+                ⚠️ Warning: Existing Question Bank Will Be Deleted & Replaced
+              </p>
+              <p>
+                Proceeding with CSV import will <strong className="text-white">DELETE ALL {selectedCourse.mockExam?.length || 0} existing questions</strong> for this course and populate it with fresh questions from your CSV file.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsConfirmImportOpen(false)}
+                className="bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold px-4 py-2.5 rounded-xl text-xs cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsConfirmImportOpen(false);
+                  setTimeout(() => {
+                    csvFileInputRef.current?.click();
+                  }, 100);
+                }}
+                className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-5 py-2.5 rounded-xl text-xs shadow-lg flex items-center gap-2 cursor-pointer"
+              >
+                <Upload className="w-4 h-4" /> Yes, Proceed & Choose CSV File
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* POPUP MODAL 2: COURSE EDIT MODAL OVERLAY                                  */}
       {/* ========================================================================= */}
       {editingCourse && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
@@ -1074,7 +1178,6 @@ export default function AdminDashboard({
                 />
               </div>
 
-              {/* Point 3: Upload Local Image Binary Base64 */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
                 <div className="md:col-span-2 space-y-1">
                   <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
@@ -1147,7 +1250,7 @@ export default function AdminDashboard({
       )}
 
       {/* ========================================================================= */}
-      {/* POPUP MODAL 2: QUESTION EDIT POPUP MODAL OVERLAY (Point 6)               */}
+      {/* POPUP MODAL 3: QUESTION EDIT POPUP MODAL OVERLAY                          */}
       {/* ========================================================================= */}
       {isQuestionModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
@@ -1178,7 +1281,6 @@ export default function AdminDashboard({
                 />
               </div>
 
-              {/* Point 6: Upload Question Illustration Diagram Image */}
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
                   <span>Question Diagram / Illustration Image (Ảnh Minh Họa Đề Bài)</span>
