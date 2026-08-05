@@ -1,10 +1,12 @@
 import React from 'react';
-import { Gift, Award, Youtube, User, LogOut, Shield } from 'lucide-react';
+import { Gift, Award, Youtube, User, LogOut, Shield, Sun, Moon } from 'lucide-react';
 import { UserProfile } from '../types';
 
 interface HeaderProps {
   dbSource?: string;
   user: UserProfile | null;
+  theme?: 'light' | 'dark';
+  onToggleTheme?: () => void;
   onOpenVouchers?: () => void;
   onOpenAuth: () => void;
   onOpenAdmin: () => void;
@@ -14,13 +16,19 @@ interface HeaderProps {
 export default function Header({
   dbSource = 'local',
   user,
+  theme = 'light',
+  onToggleTheme,
   onOpenVouchers,
   onOpenAuth,
   onOpenAdmin,
   onLogout,
 }: HeaderProps) {
   return (
-    <header className="w-full bg-white border-b border-slate-100 py-3.5 px-4 md:px-12 sticky top-0 z-40 shadow-xs">
+    <header className={`w-full py-3.5 px-4 md:px-12 sticky top-0 z-40 shadow-xs border-b transition-colors ${
+      theme === 'dark' 
+        ? 'bg-slate-900 border-slate-800 text-slate-100' 
+        : 'bg-white border-slate-100 text-slate-900'
+    }`}>
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3">
         {/* Logo & Title */}
         <div className="flex items-center gap-3">
@@ -36,14 +44,18 @@ export default function Header({
           </div>
           
           <div className="text-center sm:text-left">
-            <h1 className="font-display font-extrabold text-base sm:text-lg text-slate-900 tracking-tight leading-tight flex items-center justify-center sm:justify-start gap-1.5">
+            <h1 className={`font-display font-extrabold text-base sm:text-lg tracking-tight leading-tight flex items-center justify-center sm:justify-start gap-1.5 ${
+              theme === 'dark' ? 'text-white' : 'text-slate-900'
+            }`}>
               OutSystems Pro Academy
               <span className="hidden sm:inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-100 text-[10px] font-bold px-1.5 py-0.5 rounded-md">
                 <Award className="w-3 h-3 text-blue-500" />
                 Specialist Dumps
               </span>
             </h1>
-            <p className="font-sans text-[11px] text-slate-500 font-medium">
+            <p className={`font-sans text-[11px] font-medium ${
+              theme === 'dark' ? 'text-slate-400' : 'text-slate-500'
+            }`}>
               OutSystems Practice Tests & Certification Exam Dumps
             </p>
           </div>
@@ -51,6 +63,21 @@ export default function Header({
         
         {/* Right Nav Actions */}
         <div className="flex flex-wrap items-center justify-center gap-2 shrink-0">
+          {/* Light / Dark Mode Toggle Button (Item 2) */}
+          {onToggleTheme && (
+            <button
+              onClick={onToggleTheme}
+              className={`p-2 rounded-full border transition-all cursor-pointer ${
+                theme === 'dark'
+                  ? 'bg-slate-800 hover:bg-slate-700 text-amber-400 border-slate-700'
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+              }`}
+              title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            >
+              {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-700" />}
+            </button>
+          )}
+
           <a
             href="https://www.youtube.com/@outsystems-pro-academy"
             target="_blank"
@@ -73,9 +100,13 @@ export default function Header({
 
           {/* User Auth Status & Admin-Only Button */}
           {user ? (
-            <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-full border border-slate-200">
-              <span className="text-xs font-bold text-slate-800 px-2.5 truncate max-w-[120px] sm:max-w-xs flex items-center gap-1">
-                <User className="w-3.5 h-3.5 text-blue-600" />
+            <div className={`flex items-center gap-2 p-1 rounded-full border ${
+              theme === 'dark' ? 'bg-slate-800 border-slate-700' : 'bg-slate-100 border-slate-200'
+            }`}>
+              <span className={`text-xs font-bold px-2.5 truncate max-w-[120px] sm:max-w-xs flex items-center gap-1 ${
+                theme === 'dark' ? 'text-slate-200' : 'text-slate-800'
+              }`}>
+                <User className="w-3.5 h-3.5 text-blue-500" />
                 {user.email}
               </span>
 

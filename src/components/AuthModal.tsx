@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Mail, Lock, Shield, Info } from 'lucide-react';
+import { X, Mail, Lock, Shield, Info, AlertCircle } from 'lucide-react';
 import { UserProfile } from '../types';
 
 interface AuthModalProps {
@@ -22,7 +22,7 @@ export default function AuthModal({ onClose, onSuccess }: AuthModalProps) {
       return;
     }
 
-    if (!password || password.length < 4) {
+    if (!password) {
       setError('Please enter your account password.');
       return;
     }
@@ -42,7 +42,7 @@ export default function AuthModal({ onClose, onSuccess }: AuthModalProps) {
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        setError(data.error || 'Authentication failed. Incorrect email or password.');
+        setError(data.error || 'Authentication failed. Invalid email or password.');
         return;
       }
 
@@ -52,18 +52,7 @@ export default function AuthModal({ onClose, onSuccess }: AuthModalProps) {
       onSuccess(userProfile);
       onClose();
     } catch (err) {
-      // Local fallback for offline/client mode
-      const assignedRole = email.trim().toLowerCase() === 'duongrbt@gmail.com' ? 'admin' : 'student';
-      const userProfile: UserProfile = {
-        id: 'usr_' + Date.now(),
-        email: email.trim().toLowerCase(),
-        role: assignedRole,
-        status: 'active',
-      };
-
-      localStorage.setItem('outsystems_user', JSON.stringify(userProfile));
-      onSuccess(userProfile);
-      onClose();
+      setError('Could not connect to authentication server. Check your connection.');
     } finally {
       setLoading(false);
     }
@@ -82,30 +71,31 @@ export default function AuthModal({ onClose, onSuccess }: AuthModalProps) {
               Sign In to OutSystems Academy
             </h3>
             <p className="text-xs text-slate-400 mt-1">
-              Access student portal & Admin Management Panel
+              Access student portal & Admin Command Center
             </p>
           </div>
           <button 
             onClick={onClose}
-            className="text-slate-400 hover:text-white p-1 rounded-full hover:bg-slate-800 transition-colors z-10"
+            className="text-slate-400 hover:text-white p-1 rounded-full hover:bg-slate-800 transition-colors z-10 cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Notice Info Box: No Self Registration */}
+        {/* Notice Info Box: Password Required */}
         <div className="bg-blue-50/70 border-b border-blue-100 p-3.5 px-6 flex items-start gap-2.5 text-xs text-blue-900">
           <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
           <p className="leading-relaxed font-medium">
-            Student accounts & activation codes are issued by Admin upon purchasing a course. Log in below with your assigned credentials.
+            Strict Password Verification Enabled. Enter your assigned account email and password to log in.
           </p>
         </div>
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {error && (
-            <div className="bg-red-50 text-red-700 text-xs p-3 rounded-xl border border-red-200 font-semibold">
-              {error}
+            <div className="bg-red-50 text-red-700 text-xs p-3 rounded-xl border border-red-200 font-semibold flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+              <span>{error}</span>
             </div>
           )}
 

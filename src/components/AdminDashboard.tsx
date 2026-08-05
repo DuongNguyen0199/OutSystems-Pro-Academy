@@ -27,7 +27,10 @@ import {
   FolderPlus,
   Download,
   AlertTriangle,
-  Save
+  Save,
+  Users,
+  UserPlus,
+  RotateCcw
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -41,13 +44,22 @@ export default function AdminDashboard({
   onClose,
   onUpdateCourses,
 }: AdminDashboardProps) {
-  const [activeTab, setActiveTab] = useState<'courses' | 'payments' | 'questions' | 'notifications'>('courses');
+  const [activeTab, setActiveTab] = useState<'courses' | 'payments' | 'questions' | 'users' | 'notifications'>('courses');
   const [selectedCourseId, setSelectedCourseId] = useState<string>(courses[0]?.id || '');
   const [searchQuestionQuery, setSearchQuestionQuery] = useState('');
 
   // Payment requests & activation codes state
   const [paymentRequests, setPaymentRequests] = useState<PaymentRequest[]>([]);
   const [activationCodes, setActivationCodes] = useState<ActivationCode[]>([]);
+
+  // User Management State (Item 3)
+  const [usersList, setUsersList] = useState<any[]>([]);
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserFullName, setNewUserFullName] = useState('');
+  const [newUserRole, setNewUserRole] = useState<'student' | 'admin'>('student');
+  const [userRegisterMsg, setUserRegisterMsg] = useState('');
+  const [searchUserQuery, setSearchUserQuery] = useState('');
   
   // Code Generator state
   const [genEmail, setGenEmail] = useState('');
@@ -110,7 +122,17 @@ export default function AdminDashboard({
     };
   };
 
-  // Fetch payment requests & notification settings on load
+  const fetchUsers = () => {
+    fetch('/api/admin/users', { headers: getAdminHeaders() })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.users) setUsersList(data.users);
+        if (data && data.codes) setActivationCodes(data.codes);
+      })
+      .catch(() => {});
+  };
+
+  // Fetch data on load
   useEffect(() => {
     fetch('/api/admin/payment-requests', {
       headers: getAdminHeaders()
@@ -121,6 +143,8 @@ export default function AdminDashboard({
         if (data && data.codes) setActivationCodes(data.codes);
       })
       .catch(() => {});
+
+    fetchUsers();
 
     fetch('/api/admin/notification-settings', {
       headers: getAdminHeaders()
@@ -136,6 +160,50 @@ export default function AdminDashboard({
       })
       .catch(() => {});
   }, [courses]);
+
+  // User Registration Handler (Item 3)
+  const handleRegisterUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newUserEmail || !newUserPassword) return;
+
+    try {
+      const res = await fetch('/api/admin/users/create', {
+        method: 'POST',
+        headers: getAdminHeaders(),
+        body: JSON.stringify({
+          email: newUserEmail,
+          password: newUserPassword,
+          fullName: newUserFullName,
+          role: newUserRole
+        })
+      });
+      const data = await res.json();
+      setUserRegisterMsg(data.message || 'User registered successfully!');
+      fetchUsers();
+      setNewUserEmail('');
+      setNewUserPassword('');
+      setNewUserFullName('');
+    } catch (err) {
+      setUserRegisterMsg('Failed to register user.');
+    }
+  };
+
+  // Code Reset Handler (Item 3)
+  const handleResetUserCode = async (userEmail: string, courseId: string) => {
+    if (!confirm(`Are you sure you want to reset and revoke activation code for user ${userEmail}?`)) return;
+    try {
+      const res = await fetch('/api/admin/users/reset-code', {
+        method: 'POST',
+        headers: getAdminHeaders(),
+        body: JSON.stringify({ userEmail, courseId })
+      });
+      const data = await res.json();
+      alert(data.message || 'Code reset successfully.');
+      fetchUsers();
+    } catch (err) {
+      alert('Could not reset code.');
+    }
+  };
 
   // Open Course Edit Popup Modal
   const handleOpenCourseEditor = (c: Course) => {
@@ -537,6 +605,11 @@ export default function AdminDashboard({
     q.choices.some(c => c.text.toLowerCase().includes(searchQuestionQuery.toLowerCase()))
   );
 
+  const filteredUsers = usersList.filter(u =>
+    u.email.toLowerCase().includes(searchUserQuery.toLowerCase()) ||
+    (u.fullName && u.fullName.toLowerCase().includes(searchUserQuery.toLowerCase()))
+  );
+
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans relative">
       
@@ -575,7 +648,7 @@ export default function AdminDashboard({
         <div className="flex items-center gap-2 bg-slate-900 p-1.5 rounded-2xl border border-slate-800">
           <button
             onClick={() => setActiveTab('courses')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
               activeTab === 'courses'
                 ? 'bg-blue-600 text-white shadow-md'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800'
@@ -586,8 +659,20 @@ export default function AdminDashboard({
           </button>
 
           <button
+            onClick={() => setActiveTab('users')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'users'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Users className="w-4 h-4 text-emerald-400" />
+            <span>User Accounts</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('payments')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
               activeTab === 'payments'
                 ? 'bg-blue-600 text-white shadow-md'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800'
@@ -599,7 +684,7 @@ export default function AdminDashboard({
 
           <button
             onClick={() => setActiveTab('questions')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
               activeTab === 'questions'
                 ? 'bg-blue-600 text-white shadow-md'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800'
@@ -611,7 +696,7 @@ export default function AdminDashboard({
 
           <button
             onClick={() => setActiveTab('notifications')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
               activeTab === 'notifications'
                 ? 'bg-blue-600 text-white shadow-md'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800'
@@ -709,7 +794,175 @@ export default function AdminDashboard({
           </div>
         )}
 
-        {/* TAB 2: PAYMENTS & CODE GENERATOR */}
+        {/* TAB 2: USER ACCOUNTS & ACCESS CODES (Item 3) */}
+        {activeTab === 'users' && (
+          <div className="space-y-6">
+            <h2 className="font-display font-extrabold text-xl text-white flex items-center gap-2.5">
+              <Users className="w-6 h-6 text-emerald-400" />
+              User Accounts Management & Code Reset
+            </h2>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* User Registration Form */}
+              <div className="bg-slate-800 border border-slate-700 rounded-2xl p-5 space-y-4">
+                <h3 className="font-display font-bold text-sm text-white flex items-center gap-2">
+                  <UserPlus className="w-4 h-4 text-emerald-400" /> Register New Student / Admin Account
+                </h3>
+
+                {userRegisterMsg && (
+                  <div className="bg-slate-900 border border-slate-700 p-3 rounded-xl text-xs font-bold text-emerald-400">
+                    {userRegisterMsg}
+                  </div>
+                )}
+
+                <form onSubmit={handleRegisterUser} className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-400">User Email</label>
+                    <input
+                      type="email"
+                      required
+                      placeholder="student@gmail.com"
+                      value={newUserEmail}
+                      onChange={(e) => setNewUserEmail(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none focus:border-blue-500 font-medium"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-400">Account Password</label>
+                    <input
+                      type="password"
+                      required
+                      placeholder="Assign password"
+                      value={newUserPassword}
+                      onChange={(e) => setNewUserPassword(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none focus:border-blue-500 font-medium"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-400">Full Name (Optional)</label>
+                    <input
+                      type="text"
+                      placeholder="Nguyen Van A"
+                      value={newUserFullName}
+                      onChange={(e) => setNewUserFullName(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none focus:border-blue-500 font-medium"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-400">Role</label>
+                    <select
+                      value={newUserRole}
+                      onChange={(e) => setNewUserRole(e.target.value as 'student' | 'admin')}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none focus:border-blue-500 font-bold"
+                    >
+                      <option value="student">Student (Học viên)</option>
+                      <option value="admin">Admin (Quản trị viên)</option>
+                    </select>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-3 px-4 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <UserPlus className="w-4 h-4" /> Create User Account
+                  </button>
+                </form>
+              </div>
+
+              {/* Users Table & Code Reset Actions */}
+              <div className="lg:col-span-2 bg-slate-800 border border-slate-700 rounded-2xl p-5 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-700 pb-3">
+                  <h3 className="font-display font-bold text-sm text-white flex items-center gap-2">
+                    <Users className="w-4 h-4 text-blue-400" />
+                    Registered Users ({usersList.length})
+                  </h3>
+
+                  <div className="relative w-64">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      placeholder="Search users..."
+                      value={searchUserQuery}
+                      onChange={(e) => setSearchUserQuery(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+                  {filteredUsers.length > 0 ? (
+                    filteredUsers.map((u) => {
+                      const userCodes = activationCodes.filter(c => c.userEmail.toLowerCase() === u.email.toLowerCase());
+                      return (
+                        <div
+                          key={u.id}
+                          className="bg-slate-900 border border-slate-700 p-4 rounded-xl space-y-3"
+                        >
+                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-xs text-white">{u.email}</span>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                                  u.role === 'admin' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                                }`}>
+                                  {u.role.toUpperCase()}
+                                </span>
+                              </div>
+                              <p className="text-xs text-slate-400">{u.fullName || 'No Name'}</p>
+                            </div>
+
+                            <span className="text-[10px] font-mono text-slate-500">
+                              Password: <strong className="text-slate-300 font-bold">{u.password || '••••••••'}</strong>
+                            </span>
+                          </div>
+
+                          {/* Codes Allocation & Reset */}
+                          <div className="bg-slate-950 p-3 rounded-lg border border-slate-800 space-y-2">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                              Assigned Course Activation Codes ({userCodes.length}):
+                            </span>
+                            {userCodes.length > 0 ? (
+                              <div className="space-y-1.5">
+                                {userCodes.map((c) => {
+                                  const courseObj = courses.find(cr => cr.id === c.courseId);
+                                  return (
+                                    <div key={c.id} className="flex items-center justify-between gap-2 text-xs bg-slate-900 p-2 rounded border border-slate-800">
+                                      <div>
+                                        <p className="font-bold text-blue-300">{courseObj?.title || c.courseId}</p>
+                                        <p className="font-mono text-[11px] text-emerald-400">{c.code} ({c.status})</p>
+                                      </div>
+                                      <button
+                                        onClick={() => handleResetUserCode(u.email, c.courseId)}
+                                        className="bg-red-950/60 hover:bg-red-900 text-red-300 border border-red-800 text-[10px] font-bold px-2.5 py-1 rounded flex items-center gap-1 cursor-pointer shrink-0"
+                                      >
+                                        <RotateCcw className="w-3 h-3 text-red-400" /> Reset Code
+                                      </button>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <p className="text-[11px] text-slate-500 italic">No activation codes issued yet.</p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <p className="text-xs text-slate-500 italic text-center py-8">
+                      No user accounts found.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: PAYMENTS & CODE GENERATOR */}
         {activeTab === 'payments' && (
           <div className="space-y-6">
             <h2 className="font-display font-extrabold text-xl text-white flex items-center gap-2.5">
@@ -839,7 +1092,7 @@ export default function AdminDashboard({
           </div>
         )}
 
-        {/* TAB 3: QUESTION BANK & CSV FILE IMPORTER */}
+        {/* TAB 4: QUESTION BANK & CSV FILE IMPORTER */}
         {activeTab === 'questions' && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -1004,7 +1257,7 @@ export default function AdminDashboard({
           </div>
         )}
 
-        {/* TAB 4: GMAIL & TELEGRAM NOTIFICATION ALERTS */}
+        {/* TAB 5: GMAIL & TELEGRAM NOTIFICATION ALERTS */}
         {activeTab === 'notifications' && (
           <div className="space-y-6">
             <h2 className="font-display font-extrabold text-xl text-white flex items-center gap-2.5">
@@ -1106,9 +1359,7 @@ export default function AdminDashboard({
 
       </main>
 
-      {/* ========================================================================= */}
-      {/* POPUP MODAL 1: CONFIRMATION MODAL FOR CSV IMPORT                          */}
-      {/* ========================================================================= */}
+      {/* POPUP MODAL 1: CONFIRMATION MODAL FOR CSV IMPORT */}
       {isConfirmImportOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-slate-800 border border-slate-700 rounded-3xl w-full max-w-lg shadow-2xl p-6 space-y-5 animate-in zoom-in-95 duration-150">
@@ -1156,9 +1407,7 @@ export default function AdminDashboard({
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* POPUP MODAL 2: COURSE EDIT MODAL OVERLAY                                  */}
-      {/* ========================================================================= */}
+      {/* POPUP MODAL 2: COURSE EDIT MODAL OVERLAY */}
       {editingCourse && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
           <div className="bg-slate-800 border border-slate-700 rounded-3xl w-full max-w-2xl shadow-2xl p-6 space-y-5 animate-in zoom-in-95 duration-150">
@@ -1288,9 +1537,7 @@ export default function AdminDashboard({
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* POPUP MODAL 3: QUESTION EDIT POPUP MODAL OVERLAY                          */}
-      {/* ========================================================================= */}
+      {/* POPUP MODAL 3: QUESTION EDIT POPUP MODAL OVERLAY */}
       {isQuestionModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
           <div className="bg-slate-800 border border-slate-700 rounded-3xl w-full max-w-3xl shadow-2xl p-6 space-y-5 animate-in zoom-in-95 duration-150">

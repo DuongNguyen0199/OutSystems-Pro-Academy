@@ -19,6 +19,17 @@ export default function App() {
   // User Authentication State
   const [user, setUser] = useState<UserProfile | null>(null);
 
+  // Synchronized Theme State (Item 2)
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    return (localStorage.getItem('outsystems_theme') as 'light' | 'dark') || 'light';
+  });
+
+  const toggleTheme = () => {
+    const nextTheme = theme === 'light' ? 'dark' : 'light';
+    setTheme(nextTheme);
+    localStorage.setItem('outsystems_theme', nextTheme);
+  };
+
   // Modals state
   const [selectedCourseForPayment, setSelectedCourseForPayment] = useState<Course | null>(null);
   const [selectedCourseForCode, setSelectedCourseForCode] = useState<Course | null>(null);
@@ -30,7 +41,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [copied, setCopied] = useState(false);
 
-  // Load user session on mount
+  // Load user session and dynamic courses on mount
   useEffect(() => {
     const savedUser = localStorage.getItem('outsystems_user');
     if (savedUser) {
@@ -85,12 +96,16 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-850 flex flex-col font-sans selection:bg-blue-100 selection:text-blue-900">
+    <div className={`min-h-screen flex flex-col font-sans selection:bg-blue-100 selection:text-blue-900 transition-colors ${
+      theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-850'
+    }`}>
       
       {/* Navbar Header */}
       <Header 
         dbSource={dbSource} 
         user={user}
+        theme={theme}
+        onToggleTheme={toggleTheme}
         onOpenVouchers={() => setIsVouchersOpen(true)}
         onOpenAuth={() => setIsAuthOpen(true)}
         onOpenAdmin={() => setIsAdminOpen(true)}
@@ -118,112 +133,81 @@ export default function App() {
                   rel="noopener noreferrer"
                   className="group inline-flex items-center gap-2 bg-gradient-to-r from-red-600 via-rose-600 to-red-500 hover:from-red-700 hover:to-rose-700 hover:to-red-600 text-white px-4 py-1.5 rounded-full text-xs font-extrabold uppercase tracking-wider shadow-md hover:shadow-red-600/30 transition-all cursor-pointer"
                 >
-                  <Youtube className="w-4 h-4 fill-white text-white animate-pulse shrink-0" />
-                  <span>OutSystems Pro Academy YouTube</span>
+                  <Youtube className="w-4 h-4 fill-white text-white shrink-0 group-hover:scale-110 transition-transform" />
+                  <span>Sub YouTube @outsystems-pro-academy</span>
                 </a>
               </div>
 
-              <h2 className="font-display font-extrabold text-2xl sm:text-3xl md:text-4xl text-white tracking-tight leading-tight">
-                Pass Your Certification <span className="bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">On The First Try</span>
+              <h2 className="font-display font-black text-2xl sm:text-3xl md:text-4xl text-white tracking-tight leading-tight">
+                Ace Your OutSystems Certifications with Official 100% Exam Dumps
               </h2>
-              <p className="text-slate-400 text-sm md:text-base leading-relaxed font-medium">
-                100% verified OutSystems dumps & practice tests with Udemy-style exam simulator, step-by-step answers, and Gemini AI Tutor.
+
+              <p className="text-xs sm:text-sm text-slate-300 font-medium leading-relaxed max-w-xl">
+                Comprehensive question banks, timed practice exams, and step-by-step explanations for O11 and ODC Certifications.
               </p>
-              
-              <div className="flex flex-wrap items-center justify-center lg:justify-start gap-x-4 gap-y-2 pt-2 text-xs font-semibold text-slate-300">
-                <div className="flex items-center gap-1.5 bg-slate-850/50 px-2.5 py-1 rounded-lg border border-slate-800">
-                  <Check className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>100% Up-To-Date Material</span>
-                </div>
-                <div className="flex items-center gap-1.5 bg-slate-850/50 px-2.5 py-1 rounded-lg border border-slate-800">
-                  <Check className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Udemy Test Simulator</span>
-                </div>
-                <div className="flex items-center gap-1.5 bg-slate-850/50 px-2.5 py-1 rounded-lg border border-slate-800">
-                  <Check className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Discount Vouchers Available</span>
-                </div>
-              </div>
             </div>
-            
-            {/* Call to action contact box */}
-            <div className="w-full lg:w-auto shrink-0 flex justify-center">
-              <div className="bg-slate-950/60 backdrop-blur-xs border border-slate-800/80 p-5 rounded-2xl space-y-4 w-full max-w-xs md:w-80 shadow-2xl">
-                <div className="space-y-1 text-center lg:text-left">
-                  <p className="text-blue-400 text-[10px] font-bold tracking-wider uppercase">
-                    GET EXAM DUMP & SUPPORT
-                  </p>
-                  <p className="text-slate-300 text-xs font-medium leading-relaxed">
-                    Contact the instructor directly via email to access special prep bundles & vouchers:
-                  </p>
-                </div>
-                
-                <div className="space-y-2.5">
-                  <div className="flex items-center justify-between gap-2 bg-slate-900/90 border border-slate-800 p-2.5 rounded-xl">
-                    <div className="flex items-center gap-2 overflow-hidden">
-                      <Mail className="w-4 h-4 text-blue-400 shrink-0" />
-                      <a 
-                        href="mailto:duongrbt@gmail.com" 
-                        className="text-xs font-bold text-slate-200 hover:text-white truncate hover:underline font-mono"
-                      >
-                        duongrbt@gmail.com
-                      </a>
-                    </div>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText('duongrbt@gmail.com');
-                        setCopied(true);
-                        setTimeout(() => setCopied(false), 2000);
-                      }}
-                      className="text-slate-400 hover:text-slate-200 p-1.5 hover:bg-slate-800 rounded-lg transition-all shrink-0 cursor-pointer"
-                    >
-                      {copied ? (
-                        <Check className="w-3.5 h-3.5 text-emerald-400" />
-                      ) : (
-                        <Copy className="w-3.5 h-3.5" />
-                      )}
-                    </button>
-                  </div>
-                  
-                  <a
-                    href="mailto:duongrbt@gmail.com"
-                    className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2.5 px-4 rounded-xl shadow-xs transition-colors cursor-pointer text-center"
-                  >
-                    <Mail className="w-3.5 h-3.5" />
-                    <span>Email Admin Directly</span>
-                  </a>
-                </div>
+
+            {/* Quick Stats Grid */}
+            <div className="grid grid-cols-2 gap-3 w-full lg:w-auto shrink-0 font-sans">
+              <div className="bg-slate-800/80 backdrop-blur-xs border border-slate-700/80 p-3.5 rounded-2xl text-center space-y-1">
+                <span className="font-display font-extrabold text-xl text-blue-400">11</span>
+                <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">Cert Courses</p>
+              </div>
+              <div className="bg-slate-800/80 backdrop-blur-xs border border-slate-700/80 p-3.5 rounded-2xl text-center space-y-1">
+                <span className="font-display font-extrabold text-xl text-emerald-400">1,800+</span>
+                <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">Exam Questions</p>
+              </div>
+              <div className="bg-slate-800/80 backdrop-blur-xs border border-slate-700/80 p-3.5 rounded-2xl text-center space-y-1">
+                <span className="font-display font-extrabold text-xl text-amber-400">100%</span>
+                <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">Pass Rate</p>
+              </div>
+              <div className="bg-slate-800/80 backdrop-blur-xs border border-slate-700/80 p-3.5 rounded-2xl text-center space-y-1">
+                <span className="font-display font-extrabold text-xl text-purple-400">O11 & ODC</span>
+                <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">Platforms</p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Search Input Panel */}
-        <div className="max-w-xl mx-auto relative">
-          <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-            <Search className="w-5 h-5 text-slate-400" />
+        {/* Filter / Search Bar */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="relative w-full sm:w-80">
+            <input
+              type="text"
+              placeholder="Search courses by name or tag..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className={`w-full border rounded-2xl py-3 pl-10 pr-4 text-xs md:text-sm outline-none transition-all ${
+                theme === 'dark' 
+                  ? 'bg-slate-900 border-slate-800 text-white focus:border-blue-500' 
+                  : 'bg-white border-slate-200 text-slate-900 focus:border-blue-600'
+              }`}
+            />
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
           </div>
-          <input
-            type="text"
-            placeholder="Search courses by name or platform..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-600 rounded-xl py-3.5 pl-11 pr-4 text-sm text-slate-900 placeholder-slate-400 outline-none shadow-xs transition-all"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-xs font-semibold text-slate-400 hover:text-slate-600 cursor-pointer"
-            >
-              Clear
-            </button>
-          )}
+
+          <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+            <span>Showing {filteredCourses.length} Courses</span>
+          </div>
         </div>
 
-        {/* Course Cards Container */}
-        <div className="space-y-6">
-          {filteredCourses.length > 0 ? (
-            filteredCourses.map((course) => (
+        {/* Course Cards Grid */}
+        {isLoading ? (
+          <div className="grid grid-cols-1 gap-6">
+            {[1, 2, 3].map((n) => (
+              <div key={n} className="bg-white border border-slate-200 rounded-2xl p-6 h-48 animate-pulse flex gap-6">
+                <div className="w-48 bg-slate-100 rounded-xl"></div>
+                <div className="flex-1 space-y-3">
+                  <div className="h-6 bg-slate-100 rounded w-1/3"></div>
+                  <div className="h-4 bg-slate-100 rounded w-1/4"></div>
+                  <div className="h-12 bg-slate-100 rounded w-full"></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-6">
+            {filteredCourses.map((course) => (
               <CourseCard
                 key={course.id}
                 course={course}
@@ -231,72 +215,38 @@ export default function App() {
                 onSelectActivationCode={(c) => setSelectedCourseForCode(c)}
                 onSelectVouchers={() => setIsVouchersOpen(true)}
               />
-            ))
-          ) : (
-            <div className="text-center py-12 bg-white rounded-2xl border border-slate-200 shadow-2xs max-w-md mx-auto space-y-3">
-              <AlertCircle className="w-10 h-10 text-slate-400 mx-auto" />
-              <h3 className="font-display font-semibold text-lg text-slate-900">
-                No courses found
-              </h3>
-              <button
-                onClick={() => setSearchQuery('')}
-                className="text-xs font-semibold text-blue-600 underline cursor-pointer"
-              >
-                Reset Search
-              </button>
-            </div>
-          )}
-        </div>
+            ))}
+          </div>
+        )}
 
       </main>
 
       {/* Footer */}
-      <footer className="w-full bg-white border-t border-slate-100 py-8 px-6 md:px-12 text-center text-xs text-slate-400 font-medium">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p>© 2026 OutSystems Practice Tests & Exam Preparation. All rights reserved.</p>
-          <div className="flex gap-4">
-            <a href="mailto:duongrbt@gmail.com" className="hover:text-slate-600 underline">
-              Contact Instructor (duongrbt@gmail.com)
-            </a>
-          </div>
-        </div>
+      <footer className={`border-t py-8 px-4 text-center text-xs transition-colors ${
+        theme === 'dark' ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-white border-slate-100 text-slate-500'
+      }`}>
+        <p>© 2026 OutSystems Pro Academy — Official Certification Dumps & Practice Exams</p>
       </footer>
 
-      {/* DYNAMIC MODALS */}
-
-      {/* 1. Auth Modal */}
-      {isAuthOpen && (
-        <AuthModal
-          onClose={() => setIsAuthOpen(false)}
-          onSuccess={(u) => setUser(u)}
-        />
-      )}
-
-      {/* 2. Payment Modal */}
+      {/* Modals */}
       {selectedCourseForPayment && (
         <PaymentModal
           course={selectedCourseForPayment}
-          user={user}
           onClose={() => setSelectedCourseForPayment(null)}
         />
       )}
 
-      {/* 3. Activation Code Modal */}
       {selectedCourseForCode && (
         <ActivationCodeModal
           course={selectedCourseForCode}
-          user={user}
           onClose={() => setSelectedCourseForCode(null)}
-          onSuccess={(c) => setActiveUdemyExamCourse(c)}
-          onRequestPayment={() => {
-            const courseToPay = selectedCourseForCode;
+          onSuccessUnlock={(unlockedCourse) => {
             setSelectedCourseForCode(null);
-            setSelectedCourseForPayment(courseToPay);
+            setActiveUdemyExamCourse(unlockedCourse);
           }}
         />
       )}
 
-      {/* 4. Udemy-Style Practice Exam Simulator */}
       {activeUdemyExamCourse && (
         <UdemyMockExam
           course={activeUdemyExamCourse}
@@ -304,22 +254,16 @@ export default function App() {
         />
       )}
 
-      {/* 5. Vouchers Modal */}
       {isVouchersOpen && (
-        <VouchersModal
-          onClose={() => setIsVouchersOpen(false)}
-        />
+        <VouchersModal onClose={() => setIsVouchersOpen(false)} />
       )}
 
-      {/* 6. Admin Management Dashboard */}
-      {isAdminOpen && (
-        <AdminDashboard
-          courses={coursesList}
-          onClose={() => setIsAdminOpen(false)}
-          onUpdateCourses={(updated) => setCoursesList(updated)}
+      {isAuthOpen && (
+        <AuthModal
+          onClose={() => setIsAuthOpen(false)}
+          onSuccess={(u) => setUser(u)}
         />
       )}
-
     </div>
   );
 }
