@@ -51,7 +51,7 @@ export default function ActivationCodeModal({
 
       const data = await response.json();
 
-      if (data.valid) {
+      if (data.valid || data.success) {
         onSuccess(course);
         onClose();
       } else {

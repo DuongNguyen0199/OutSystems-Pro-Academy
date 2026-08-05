@@ -680,7 +680,7 @@ app.post("/api/payment-request", async (req, res) => {
   sendTelegramAlert(alertText).catch(() => {});
   sendAdminEmailAlert(`[Payment Request] ${reqObj.courseTitle}`, alertText.replace(/\*/g, "")).catch(() => {});
 
-  res.json({ success: true, message: "Payment request submitted successfully." });
+    res.json({ success: true, message: "Payment request submitted successfully." });
 });
 
 // Admin payment request listing
@@ -688,10 +688,10 @@ app.get("/api/admin/payment-requests", requireAdminAuth, (req, res) => {
   res.json({ requests: memoryPaymentRequests, codes: memoryActivationCodes });
 });
 
-// Code verification endpoint (Item 3)
-app.post("/api/verify-code", async (req, res) => {
-  const { email, code, courseId } = req.body;
-  const cleanEmail = (email || "").trim().toLowerCase();
+// Code validation & verification endpoint (Item 3)
+const handleCodeValidation = async (req: express.Request, res: express.Response) => {
+  const { email, userEmail, code, courseId } = req.body;
+  const cleanEmail = (userEmail || email || "").trim().toLowerCase();
   const cleanCode = (code || "").trim().toUpperCase();
   const targetUuid = resolveCourseUuid(courseId);
 
@@ -703,9 +703,9 @@ app.post("/api/verify-code", async (req, res) => {
 
   if (foundCode) {
     if (foundCode.status === 'revoked') {
-      return res.status(400).json({ success: false, error: "This activation code has been revoked by Admin." });
+      return res.json({ valid: false, success: false, error: "This activation code has been revoked by Admin." });
     }
-    return res.json({ success: true, message: "Activation code verified! Practice test unlocked." });
+    return res.json({ valid: true, success: true, message: "Activation code verified! Practice test unlocked." });
   }
 
   // 2. Check Supabase enrollments table
@@ -719,19 +719,22 @@ app.post("/api/verify-code", async (req, res) => {
 
     if (enrollment) {
       if (enrollment.status === 'revoked') {
-        return res.status(400).json({ success: false, error: "This activation code has been revoked by Admin." });
+        return res.json({ valid: false, success: false, error: "This activation code has been revoked by Admin." });
       }
-      return res.json({ success: true, message: "Activation code verified! Practice test unlocked." });
+      return res.json({ valid: true, success: true, message: "Activation code verified! Practice test unlocked." });
     }
   }
 
-  // Fallback: If valid code format was generated, verify
-  if (cleanCode.includes("OUT-") || cleanCode.includes("90D")) {
-    return res.json({ success: true, message: "Activation code verified! Practice test unlocked." });
+  // Fallback: If valid code format was generated (e.g. OUT-ODC-90D-SNT4D)
+  if (cleanCode.startsWith("OUT-") || cleanCode.includes("90D")) {
+    return res.json({ valid: true, success: true, message: "Activation code verified! Practice test unlocked." });
   }
 
-  res.status(400).json({ success: false, error: "Invalid activation code for this course." });
-});
+  res.json({ valid: false, success: false, error: "Invalid activation code for this course." });
+};
+
+app.post("/api/validate-code", handleCodeValidation);
+app.post("/api/verify-code", handleCodeValidation);
 
 // Vite setup for production / development
 async function startServer() {
