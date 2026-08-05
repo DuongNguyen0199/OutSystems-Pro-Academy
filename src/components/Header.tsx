@@ -71,22 +71,24 @@ export default function Header({
             </button>
           )}
 
-          {/* Dedicated Admin Portal Button */}
-          <button
-            onClick={onOpenAdmin}
-            className="bg-slate-900 hover:bg-slate-800 text-amber-400 font-bold text-[11px] px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer border border-slate-800"
-          >
-            <Shield className="w-3.5 h-3.5 text-amber-400" />
-            <span>Admin Panel</span>
-          </button>
-
-          {/* User Auth status */}
+          {/* User Auth Status & Admin-Only Button */}
           {user ? (
             <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-full border border-slate-200">
               <span className="text-xs font-bold text-slate-800 px-2.5 truncate max-w-[120px] sm:max-w-xs flex items-center gap-1">
                 <User className="w-3.5 h-3.5 text-blue-600" />
                 {user.email}
               </span>
+
+              {/* ONLY SHOW ADMIN PANEL IF LOGGED IN AS ADMIN ROLE */}
+              {user.role === 'admin' && (
+                <button
+                  onClick={onOpenAdmin}
+                  className="bg-slate-900 hover:bg-slate-800 text-amber-400 font-bold text-[11px] px-3 py-1 rounded-full flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-800"
+                >
+                  <Shield className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Admin Panel</span>
+                </button>
+              )}
 
               <button
                 onClick={onLogout}
