@@ -549,9 +549,11 @@ async function startServer() {
       }
     });
   } else {
-    app.use(express.static(path.resolve(__dirname, "dist")));
-    app.get("*", (req, res) => {
-      res.sendFile(path.resolve(__dirname, "dist", "index.html"));
+    const distDir = __dirname.endsWith("dist") ? __dirname : path.resolve(__dirname, "dist");
+    app.use(express.static(distDir));
+    app.get("*", (req, res, next) => {
+      if (req.originalUrl.startsWith("/api")) return next();
+      res.sendFile(path.resolve(distDir, "index.html"));
     });
   }
 
