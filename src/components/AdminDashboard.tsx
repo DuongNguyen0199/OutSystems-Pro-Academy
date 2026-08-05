@@ -449,6 +449,7 @@ export default function AdminDashboard({
       imageUrl: imgUrl || undefined
     };
 
+    let finalMockQuestions: MockExamQuestion[] = [];
     const updatedCourses = courses.map((c) => {
       if (c.id === selectedCourseId) {
         let updatedMock = c.mockExam || [];
@@ -457,6 +458,7 @@ export default function AdminDashboard({
         } else {
           updatedMock = [newQ, ...updatedMock];
         }
+        finalMockQuestions = updatedMock;
         return { ...c, mockExam: updatedMock };
       }
       return c;
@@ -464,20 +466,24 @@ export default function AdminDashboard({
 
     onUpdateCourses(updatedCourses);
     setIsQuestionModalOpen(false);
+    handleSaveAllQuestionsToSupabase(finalMockQuestions);
   };
 
   const handleDeleteQuestion = (id: string) => {
     if (!confirm('Are you sure you want to delete this question?')) return;
+    let finalMockQuestions: MockExamQuestion[] = [];
     const updatedCourses = courses.map((c) => {
       if (c.id === selectedCourseId) {
+        finalMockQuestions = (c.mockExam || []).filter((q) => q.id !== id);
         return {
           ...c,
-          mockExam: (c.mockExam || []).filter((q) => q.id !== id)
+          mockExam: finalMockQuestions
         };
       }
       return c;
     });
     onUpdateCourses(updatedCourses);
+    handleSaveAllQuestionsToSupabase(finalMockQuestions);
   };
 
   // SAVE ALL QUESTIONS TO SUPABASE DATABASE
