@@ -1,14 +1,23 @@
 import React, { useState } from 'react';
 import { MockExamQuestion } from '../types';
-import { Check, X, HelpCircle, Loader2, Sparkles, RefreshCw, ChevronRight, BookOpen } from 'lucide-react';
+import { Check, X, HelpCircle, Loader2, Sparkles, RefreshCw, ChevronRight, Key, Lock } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface MockExamProps {
   courseTitle: string;
   questions: MockExamQuestion[];
+  totalAvailableQuestions?: number;
+  onOpenActivation?: () => void;
+  onOpenPayment?: () => void;
 }
 
-export default function MockExam({ courseTitle, questions }: MockExamProps) {
+export default function MockExam({
+  courseTitle,
+  questions,
+  totalAvailableQuestions = 100,
+  onOpenActivation,
+  onOpenPayment,
+}: MockExamProps) {
   const [currentIdx, setCurrentIdx] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>({});
   const [submittedAnswers, setSubmittedAnswers] = useState<Record<string, boolean>>({});
@@ -101,10 +110,9 @@ export default function MockExam({ courseTitle, questions }: MockExamProps) {
         }));
       }
     } catch (err) {
-      console.error(err);
       setAiExplanations((prev) => ({
         ...prev,
-        [questionId]: 'Could not contact the AI Tutor. Please verify your connection or try again later.'
+        [questionId]: 'AI explanation connection unavailable.'
       }));
     } finally {
       setLoadingAi((prev) => ({ ...prev, [questionId]: false }));
@@ -113,47 +121,62 @@ export default function MockExam({ courseTitle, questions }: MockExamProps) {
 
   if (isFinished) {
     const percentage = Math.round((score / questions.length) * 100);
-    const passed = percentage >= 70;
 
     return (
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 text-center max-w-2xl mx-auto my-4 shadow-sm animate-in fade-in zoom-in-95 duration-250">
-        <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-100">
-          <BookOpen className="w-8 h-8" />
-        </div>
-        
-        <h3 className="font-display font-semibold text-2xl text-slate-900 mb-2">
-          Practice Test Completed!
-        </h3>
-        <p className="text-slate-500 text-sm mb-6 font-medium">
-          You have completed the mini-mock diagnostic exam for {courseTitle}.
-        </p>
-
-        <div className="bg-slate-50 border border-slate-200 rounded-xl p-6 max-w-sm mx-auto mb-8">
-          <div className="text-5xl font-extrabold text-slate-900 mb-2 font-display">
-            {score} <span className="text-slate-400 text-2xl font-sans font-medium">/ {questions.length}</span>
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 my-4 text-center space-y-6 shadow-xs animate-in zoom-in-95 duration-200">
+        <div className="space-y-2">
+          <div className="inline-flex items-center gap-1.5 bg-blue-50 text-blue-700 border border-blue-200 px-3.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
+            <Sparkles className="w-4 h-4 text-blue-600" /> Free Preview 10-Question Demo Finished
           </div>
-          <div className="text-xs font-bold tracking-wider uppercase mb-4 text-slate-500">
-            Final Score: <span className={passed ? "text-emerald-600" : "text-amber-600"}>{percentage}%</span>
-          </div>
-          
-          <div className="w-full bg-slate-200 rounded-full h-2 mb-2 overflow-hidden">
-            <div 
-              className={`h-2 rounded-full transition-all duration-500 ${passed ? 'bg-emerald-500' : 'bg-amber-500'}`}
-              style={{ width: `${percentage}%` }}
-            ></div>
-          </div>
-          
-          <p className="text-xs text-slate-400 mt-2 font-medium">
-            {passed ? "Excellent! You are on track to pass the official exam." : "We recommend reviewing the explanation materials below and retaking."}
+          <h4 className="font-display font-extrabold text-2xl text-slate-900">
+            {courseTitle} — Demo Result
+          </h4>
+          <p className="text-slate-500 text-xs md:text-sm max-w-md mx-auto">
+            You got <strong className="text-slate-900">{score}</strong> out of <strong className="text-slate-900">{questions.length}</strong> preview questions correct ({percentage}%).
           </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
+        {/* Lockout & Unlock Full Course Callout Banner */}
+        <div className="bg-gradient-to-br from-slate-900 to-indigo-950 text-white rounded-2xl p-6 shadow-lg border border-slate-800 space-y-4 max-w-lg mx-auto text-left">
+          <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
+            <Lock className="w-6 h-6 text-amber-400 shrink-0 animate-bounce" />
+            <div>
+              <h5 className="font-display font-bold text-sm text-white">
+                Unlock Full Exam ({totalAvailableQuestions}+ Real Questions)
+              </h5>
+              <p className="text-[11px] text-slate-400 font-medium">
+                Access full 50-question Udemy practice test mode & detailed AI Tutor.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-2.5 pt-1">
+            {onOpenActivation && (
+              <button
+                onClick={onOpenActivation}
+                className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs py-2.5 px-4 rounded-xl shadow-xs transition-all cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Key className="w-3.5 h-3.5 text-amber-300" /> Enter Activation Code
+              </button>
+            )}
+
+            {onOpenPayment && (
+              <button
+                onClick={onOpenPayment}
+                className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs py-2.5 px-4 rounded-xl border border-slate-700 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Lock className="w-3.5 h-3.5 text-slate-400" /> Buy Full Course
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="pt-2">
           <button 
             onClick={handleRestart}
-            className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold px-6 py-3 rounded-xl transition-colors shadow-sm cursor-pointer"
+            className="inline-flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-5 py-2.5 rounded-xl text-xs transition-colors cursor-pointer"
           >
-            <RefreshCw className="w-4 h-4" /> Retake Practice Test
+            <RefreshCw className="w-3.5 h-3.5" /> Retake 10-Question Demo
           </button>
         </div>
       </div>
@@ -165,7 +188,7 @@ export default function MockExam({ courseTitle, questions }: MockExamProps) {
       <div className="flex items-center justify-between border-b border-slate-200 pb-4 mb-5">
         <div>
           <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-blue-700 bg-blue-50 border border-blue-150 px-2.5 py-1 rounded-md">
-            Exam Practice Simulator
+            Free Preview Quiz Mode
           </span>
           <h4 className="text-sm font-bold text-slate-900 mt-2.5 font-sans">
             {courseTitle}
@@ -173,7 +196,7 @@ export default function MockExam({ courseTitle, questions }: MockExamProps) {
         </div>
         <div className="text-right shrink-0">
           <span className="text-xs font-mono font-semibold text-slate-500">
-            Question {currentIdx + 1} of {questions.length}
+            Preview {currentIdx + 1} of {questions.length}
           </span>
           <div className="w-24 bg-slate-200 h-1.5 rounded-full mt-1.5 overflow-hidden">
             <div 
@@ -272,7 +295,7 @@ export default function MockExam({ courseTitle, questions }: MockExamProps) {
                   Next Question <ChevronRight className="w-4 h-4" />
                 </>
               ) : (
-                'Finish Quiz'
+                'Finish Demo Quiz'
               )}
             </button>
           )}
