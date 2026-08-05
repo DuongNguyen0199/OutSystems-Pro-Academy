@@ -89,7 +89,7 @@ function parseCsvFile(filePath) {
 
     if (questionText && choices.length >= 2) {
       questions.push({
-        question: questionText,
+        question_text: questionText,
         choices: choices,
         correct_answer: correctKey,
         explanation: explanation
@@ -117,9 +117,22 @@ const coursesData = [
 async function seedSupabase() {
   console.log(`📡 Connecting to Supabase at: ${supabaseUrl}`);
 
-  // 1. Upsert Courses
+  // 1. Upsert Admin User into 'users'
+  const { data: adminUser, error: userError } = await supabase.from('users').upsert({
+    email: 'duongrbt@gmail.com',
+    role: 'admin',
+    status: 'active'
+  }, { onConflict: 'email' }).select().single();
+
+  if (userError) {
+    console.error("User upsert note:", userError.message);
+  } else {
+    console.log("✅ Admin user seeded into 'users' table");
+  }
+
+  // 2. Upsert Courses & Exams
   for (const c of coursesData) {
-    const { error } = await supabase.from('courses').upsert({
+    const { error: courseErr } = await supabase.from('courses').upsert({
       id: c.id,
       title: c.title,
       price: c.price,
@@ -129,17 +142,33 @@ async function seedSupabase() {
       description: c.description
     });
 
-    if (error) {
-      console.error(`Error inserting course ${c.title}:`, error.message);
-    } else {
-      console.log(`✅ Course synced to Supabase: ${c.title}`);
+    if (courseErr) {
+      console.error(`Error inserting course ${c.title}:`, courseErr.message);
+      continue;
+    }
+
+    console.log(`✅ Course synced: ${c.title}`);
+
+    // Upsert corresponding Exam practice set
+    const examId = `11111111-2222-3333-4444-${c.id.substring(0, 12)}`;
+    const { error: examErr } = await supabase.from('exams').upsert({
+      id: examId,
+      course_id: c.id,
+      title: `${c.title} - Official Dump Practice Exam`,
+      time_limit_minutes: 75,
+      passing_score_percentage: 70
+    });
+
+    if (examErr) {
+      console.error(`  Exam note:`, examErr.message);
     }
   }
 
-  // 2. Read Dump Questions & Insert into mock_exam_questions
-  let totalInsertedQuestions = 0;
+  // 3. Read Dump Questions & Insert into exam_questions & mock_exam_questions
+  let totalQuestions = 0;
 
   for (const c of coursesData) {
+    const examId = `11111111-2222-3333-4444-${c.id.substring(0, 12)}`;
     const dirPath = path.join(rootDir, c.folder);
     let courseQuestions = [];
 
@@ -167,29 +196,59 @@ async function seedSupabase() {
     }
 
     if (courseQuestions.length > 0) {
-      const payload = courseQuestions.map(q => ({
+      // 3.1 Insert into legacy mock_exam_questions table for backwards compatibility
+      const mockPayload = courseQuestions.map(q => ({
         course_id: c.id,
-        question: q.question,
+        question: q.question_text,
         choices: q.choices,
         correct_answer: q.correct_answer,
         explanation: q.explanation
       }));
 
-      // Batch insert 50 questions at a time
-      for (let i = 0; i < payload.length; i += 50) {
-        const chunk = payload.slice(i, i + 50);
-        const { error } = await supabase.from('mock_exam_questions').insert(chunk);
-        if (error) {
-          console.error(`Error inserting questions for ${c.title}:`, error.message);
-        } else {
-          totalInsertedQuestions += chunk.length;
+      for (let i = 0; i < mockPayload.length; i += 50) {
+        const chunk = mockPayload.slice(i, i + 50);
+        await supabase.from('mock_exam_questions').insert(chunk);
+      }
+
+      // 3.2 Insert into refactored exam_questions table
+      const examPayload = courseQuestions.map(q => ({
+        exam_id: examId,
+        question_text: q.question_text,
+        correct_answer: q.correct_answer,
+        explanation: q.explanation
+      }));
+
+      for (let i = 0; i < examPayload.length; i += 50) {
+        const chunk = examPayload.slice(i, i + 50);
+        const { data: insertedQs, error: qErr } = await supabase.from('exam_questions').insert(chunk).select();
+        
+        if (!qErr && insertedQs) {
+          totalQuestions += insertedQs.length;
+
+          // Insert normalized question_options for 3NF schema
+          const optionsPayload = [];
+          insertedQs.forEach((iq, idx) => {
+            const originalChoices = courseQuestions[i + idx]?.choices || [];
+            originalChoices.forEach(opt => {
+              optionsPayload.push({
+                question_id: iq.id,
+                option_key: opt.key,
+                option_text: opt.text
+              });
+            });
+          });
+
+          if (optionsPayload.length > 0) {
+            await supabase.from('question_options').insert(optionsPayload);
+          }
         }
       }
-      console.log(`  -> Inserted ${courseQuestions.length} dump questions for ${c.title}`);
+
+      console.log(`  -> Synced ${courseQuestions.length} dump questions to both mock_exam_questions and exam_questions tables for ${c.title}`);
     }
   }
 
-  console.log(`\n🎉 SUPABASE SEEDING COMPLETED! Total questions inserted: ${totalInsertedQuestions}`);
+  console.log(`\n🎉 SUPABASE 9-TABLE REFACTORED SEEDING COMPLETED! Total questions synced: ${totalQuestions}`);
 }
 
 seedSupabase().catch(err => console.error("Migration error:", err));
