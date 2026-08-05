@@ -67,9 +67,29 @@ export default function AdminDashboard({
   const [testingTelegram, setTestingTelegram] = useState(false);
   const [testingEmail, setTestingEmail] = useState(false);
 
+  const getAdminHeaders = () => {
+    const savedUser = localStorage.getItem('outsystems_user');
+    let email = 'duongrbt@gmail.com';
+    let password = '';
+    if (savedUser) {
+      try {
+        const u = JSON.parse(savedUser);
+        if (u.email) email = u.email;
+        if (u.password) password = u.password;
+      } catch (e) {}
+    }
+    return {
+      'Content-Type': 'application/json',
+      'x-admin-email': email,
+      'x-admin-password': password,
+    };
+  };
+
   // Fetch payment requests & notification settings on load
   useEffect(() => {
-    fetch('/api/admin/payment-requests')
+    fetch('/api/admin/payment-requests', {
+      headers: getAdminHeaders()
+    })
       .then((res) => res.json())
       .then((data) => {
         if (data && data.requests) setPaymentRequests(data.requests);
@@ -77,7 +97,9 @@ export default function AdminDashboard({
       })
       .catch(() => {});
 
-    fetch('/api/admin/notification-settings')
+    fetch('/api/admin/notification-settings', {
+      headers: getAdminHeaders()
+    })
       .then((res) => res.json())
       .then((data) => {
         if (data) {
@@ -97,7 +119,7 @@ export default function AdminDashboard({
     try {
       const res = await fetch('/api/admin/notification-settings', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAdminHeaders(),
         body: JSON.stringify({
           adminEmail: adminEmailSetting,
           gmailAppPassword: gmailAppPassword,
@@ -116,7 +138,10 @@ export default function AdminDashboard({
   const handleTestTelegram = async () => {
     setTestingTelegram(true);
     try {
-      const res = await fetch('/api/admin/test-telegram', { method: 'POST' });
+      const res = await fetch('/api/admin/test-telegram', { 
+        method: 'POST',
+        headers: getAdminHeaders()
+      });
       const data = await res.json();
       alert(data.message);
     } catch (err) {
@@ -129,11 +154,14 @@ export default function AdminDashboard({
   const handleTestEmail = async () => {
     setTestingEmail(true);
     try {
-      const res = await fetch('/api/admin/test-email', { method: 'POST' });
+      const res = await fetch('/api/admin/test-email', { 
+        method: 'POST',
+        headers: getAdminHeaders()
+      });
       const data = await res.json();
       alert(data.message);
     } catch (err) {
-      alert('Could not trigger Email test alert.');
+      alert('Could not trigger Gmail test email.');
     } finally {
       setTestingEmail(false);
     }
@@ -160,7 +188,7 @@ export default function AdminDashboard({
 
     fetch('/api/admin/generate-code', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAdminHeaders(),
       body: JSON.stringify(newCodeObj)
     }).catch(() => {});
   };

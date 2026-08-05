@@ -467,8 +467,38 @@ app.post("/api/webhooks/vietqr", async (req, res) => {
 });
 
 
-// Notification Settings Management Endpoint (Role: Admin)
-app.get("/api/admin/notification-settings", (req, res) => {
+// SERVER-SIDE STRICT ADMIN AUTHENTICATION MIDDLEWARE
+// Terminates any request immediately with 403/401 if user is not verified Admin
+function requireAdminAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const adminEmail = (req.headers["x-admin-email"] as string || req.body?.adminEmail || "").trim().toLowerCase();
+  const adminPassword = (req.headers["x-admin-password"] as string || req.body?.adminPassword || "").trim();
+
+  const configuredAdminEmail = (process.env.ADMIN_EMAIL || "duongrbt@gmail.com").trim().toLowerCase();
+  const configuredAdminPassword = process.env.ADMIN_PASSWORD || "";
+
+  // 1. Check Admin Email Identity
+  if (!adminEmail || adminEmail !== configuredAdminEmail) {
+    console.warn(`[SECURITY ALERT] Unauthorized Admin API attempt blocked from IP: ${req.ip}, email: ${adminEmail}`);
+    return res.status(403).json({
+      success: false,
+      error: "Forbidden: Access denied. Server-side Admin authentication failed. Invalid identity."
+    });
+  }
+
+  // 2. If ADMIN_PASSWORD env var is set, enforce exact match
+  if (configuredAdminPassword && adminPassword !== configuredAdminPassword) {
+    console.warn(`[SECURITY ALERT] Incorrect Admin Password attempt blocked for: ${adminEmail}`);
+    return res.status(401).json({
+      success: false,
+      error: "Unauthorized: Access denied. Server-side Admin password verification failed."
+    });
+  }
+
+  next();
+}
+
+// Notification Settings Management Endpoint (Role: Admin ONLY)
+app.get("/api/admin/notification-settings", requireAdminAuth, (req, res) => {
   res.json({
     adminEmail: notificationSettings.adminEmail,
     gmailAppPassword: notificationSettings.gmailAppPassword ? "••••••••••••••••" : "",
@@ -479,7 +509,7 @@ app.get("/api/admin/notification-settings", (req, res) => {
   });
 });
 
-app.post("/api/admin/notification-settings", (req, res) => {
+app.post("/api/admin/notification-settings", requireAdminAuth, (req, res) => {
   const { adminEmail, gmailAppPassword, telegramBotToken, telegramChatId } = req.body;
 
   if (adminEmail) notificationSettings.adminEmail = adminEmail.trim();
@@ -503,13 +533,13 @@ app.post("/api/admin/notification-settings", (req, res) => {
   });
 });
 
-// Test Notifications Endpoint
-app.post("/api/admin/test-telegram", async (req, res) => {
+// Test Notifications Endpoint (Role: Admin ONLY)
+app.post("/api/admin/test-telegram", requireAdminAuth, async (req, res) => {
   const ok = await sendTelegramAlert("🧪 *Test Alert from OutSystems Pro Academy*\nTelegram notification integration is working perfectly!");
   res.json({ success: ok, message: ok ? "Telegram test alert sent!" : "Could not send Telegram message. Check Bot Token & Chat ID." });
 });
 
-app.post("/api/admin/test-email", async (req, res) => {
+app.post("/api/admin/test-email", requireAdminAuth, async (req, res) => {
   const ok = await sendAdminEmailAlert(
     "🧪 Test Notification from OutSystems Pro Academy",
     "Gmail App Password integration is working perfectly! You will receive instant payment alerts here."
@@ -571,8 +601,8 @@ app.post("/api/validate-code", (req, res) => {
   res.json({ valid: true, message: "Code successfully verified!", code: foundCode });
 });
 
-// 3. Admin: Generate Activation Code
-app.post("/api/admin/generate-code", (req, res) => {
+// 3. Admin: Generate Activation Code (Role: Admin ONLY)
+app.post("/api/admin/generate-code", requireAdminAuth, (req, res) => {
   const { code, userEmail, courseId } = req.body;
 
   const newCodeObj = {
@@ -589,8 +619,8 @@ app.post("/api/admin/generate-code", (req, res) => {
   res.json({ success: true, code: newCodeObj });
 });
 
-// 4. Admin: Get Requests & Codes
-app.get("/api/admin/payment-requests", (req, res) => {
+// 4. Admin: Get Requests & Codes (Role: Admin ONLY)
+app.get("/api/admin/payment-requests", requireAdminAuth, (req, res) => {
   res.json({
     requests: memoryPaymentRequests,
     codes: memoryActivationCodes
