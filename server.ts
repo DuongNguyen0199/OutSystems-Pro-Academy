@@ -5,6 +5,7 @@ import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import { createClient } from "@supabase/supabase-js";
 import { fallbackCourses } from "./src/data_fallback";
+import nodemailer from "nodemailer";
 
 dotenv.config();
 
@@ -229,6 +230,13 @@ app.get("/api/courses", async (req, res) => {
       };
     });
 
+    return res.json({ source: "supabase", data: mapped });
+  } catch (err) {
+    console.error("Error in /api/courses, using fallback:", err);
+    return res.json({ source: "local", data: fallbackCourses });
+  }
+});
+
 // In-memory data store for fallback/demo
 const memoryPaymentRequests: any[] = [
   {
@@ -253,8 +261,6 @@ const memoryActivationCodes: any[] = [
     createdAt: new Date().toISOString()
   }
 ];
-
-import nodemailer from "nodemailer";
 
 // Dynamic Notification Settings (Configurable via Admin Dashboard or Render Env)
 let notificationSettings = {
@@ -417,6 +423,8 @@ Instructions:
     notifications: { telegram: telegramSent, email: emailSent },
     request: newRequest
   });
+});
+
 // 1.1 VietQR Automated Bank Payment Webhook (SePay / Casso Auto Activation in 3 Seconds)
 app.post("/api/webhooks/vietqr", async (req, res) => {
   const { content, transferAmount, accumulator, gateway } = req.body;
