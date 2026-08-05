@@ -76,14 +76,16 @@ export default function App() {
     setUser(null);
   };
 
-  // Filter courses based on search
-  const filteredCourses = coursesList.filter((course) => {
-    const query = searchQuery.toLowerCase();
-    const matchesTitle = course.title.toLowerCase().includes(query);
-    const matchesDescription = course.description.toLowerCase().includes(query);
-    const matchesTags = course.tags.some((tag) => tag.text.toLowerCase().includes(query));
-    return matchesTitle || matchesDescription || matchesTags;
-  });
+  // Filter and sort courses alphabetically (A -> Z)
+  const filteredCourses = [...coursesList]
+    .sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }))
+    .filter((course) => {
+      const query = searchQuery.toLowerCase();
+      const matchesTitle = course.title.toLowerCase().includes(query);
+      const matchesDescription = course.description.toLowerCase().includes(query);
+      const matchesTags = course.tags.some((tag) => tag.text.toLowerCase().includes(query));
+      return matchesTitle || matchesDescription || matchesTags;
+    });
 
   if (isAdminOpen) {
     return (

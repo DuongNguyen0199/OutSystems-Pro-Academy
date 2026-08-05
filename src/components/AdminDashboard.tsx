@@ -161,6 +161,9 @@ export default function AdminDashboard({
       .catch(() => {});
   }, [courses]);
 
+  // Alphabetical A -> Z sorted courses list
+  const sortedCourses = [...courses].sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }));
+
   // User Registration Handler (Item 3)
   const handleRegisterUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -206,6 +209,38 @@ export default function AdminDashboard({
       fetchUsers();
     } catch (err) {
       alert('Could not reset code.');
+    }
+  // Delete User Handler (Item 1)
+  const handleDeleteUser = async (userId: string, email: string) => {
+    if (!confirm(`Are you sure you want to PERMANENTLY DELETE user "${email}"?`)) return;
+    try {
+      const res = await fetch('/api/admin/users/delete', {
+        method: 'POST',
+        headers: getAdminHeaders(),
+        body: JSON.stringify({ userId, email })
+      });
+      const data = await res.json();
+      alert(data.message || 'User deleted successfully.');
+      fetchUsers();
+    } catch (err) {
+      alert('Could not delete user.');
+    }
+  };
+
+  // Toggle User Status Active/Inactive Handler (Item 1)
+  const handleToggleUserStatus = async (userId: string, email: string, currentStatus: string) => {
+    const newStatus = currentStatus === 'inactive' ? 'active' : 'inactive';
+    try {
+      const res = await fetch('/api/admin/users/toggle-status', {
+        method: 'POST',
+        headers: getAdminHeaders(),
+        body: JSON.stringify({ userId, email, newStatus })
+      });
+      const data = await res.json();
+      alert(data.message || `User status updated to ${newStatus}.`);
+      fetchUsers();
+    } catch (err) {
+      alert('Could not update user status.');
     }
   };
 
@@ -749,7 +784,7 @@ export default function AdminDashboard({
 
             {/* Course Grid Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {courses.map((c) => (
+              {sortedCourses.map((c) => (
                 <div
                   key={c.id}
                   className="bg-slate-800/80 border border-slate-700/80 hover:border-blue-500/80 rounded-2xl p-5 flex flex-col justify-between gap-4 transition-all shadow-lg hover:shadow-blue-500/10"
@@ -918,13 +953,34 @@ export default function AdminDashboard({
                                 }`}>
                                   {u.role.toUpperCase()}
                                 </span>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                                  u.status === 'inactive' ? 'bg-red-500/20 text-red-300 border border-red-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                }`}>
+                                  {(u.status || 'active').toUpperCase()}
+                                </span>
                               </div>
                               <p className="text-xs text-slate-400">{u.fullName || 'No Name'}</p>
                             </div>
 
-                            <span className="text-[10px] font-mono text-slate-500">
-                              Password: <strong className="text-slate-300 font-bold">{u.password || '••••••••'}</strong>
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handleToggleUserStatus(u.id, u.email, u.status || 'active')}
+                                className="text-[10px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded border border-slate-700 cursor-pointer"
+                              >
+                                {u.status === 'inactive' ? 'Set Active' : 'Set Inactive'}
+                              </button>
+
+                              {u.role !== 'admin' && (
+                                <button
+                                  onClick={() => handleDeleteUser(u.id, u.email)}
+                                  className="text-[10px] font-bold bg-red-950/80 hover:bg-red-900 text-red-300 px-2.5 py-1 rounded border border-red-800 cursor-pointer flex items-center gap-1"
+                                  title="Delete User Account"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                                  <span>Delete</span>
+                                </button>
+                              )}
+                            </div>
                           </div>
 
                           {/* Codes Allocation & Reset */}
@@ -1004,7 +1060,7 @@ export default function AdminDashboard({
                       onChange={(e) => setGenCourseId(e.target.value)}
                       className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none focus:border-blue-500 font-medium"
                     >
-                      {courses.map((c) => (
+                      {sortedCourses.map((c) => (
                         <option key={c.id} value={c.id}>
                           {c.title}
                         </option>
