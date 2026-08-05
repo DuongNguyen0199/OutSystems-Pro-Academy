@@ -345,7 +345,26 @@ app.get("/api/admin/users", requireAdminAuth, async (req, res) => {
       }
     }
 
-    res.json({ success: true, users: usersList, codes: memoryActivationCodes });
+    let allCodes = [...memoryActivationCodes];
+    if (supabase) {
+      const { data: enrollData } = await supabase.from("enrollments").select("*");
+      if (enrollData && enrollData.length > 0) {
+        enrollData.forEach((e: any) => {
+          if (!allCodes.some(c => c.code.toUpperCase() === (e.activation_code || '').toUpperCase())) {
+            allCodes.push({
+              id: e.id,
+              code: e.activation_code,
+              userEmail: e.user_email,
+              courseId: e.course_id,
+              status: e.status || 'active',
+              createdAt: e.created_at || new Date().toISOString()
+            });
+          }
+        });
+      }
+    }
+
+    res.json({ success: true, users: usersList, codes: allCodes });
   } catch (err) {
     res.status(500).json({ success: false, error: "Failed to fetch users." });
   }
@@ -442,30 +461,42 @@ app.post("/api/admin/generate-code", requireAdminAuth, async (req, res) => {
   try {
     const codeObj = req.body;
     if (codeObj && codeObj.code) {
-      memoryActivationCodes.unshift({
+      const cleanCode = codeObj.code.trim().toUpperCase();
+      const cleanEmail = (codeObj.userEmail || '').trim().toLowerCase();
+
+      const newCodeItem = {
         id: codeObj.id || 'code_' + Date.now(),
-        code: codeObj.code.trim().toUpperCase(),
-        userEmail: (codeObj.userEmail || '').trim().toLowerCase(),
+        code: cleanCode,
+        userEmail: cleanEmail,
         courseId: codeObj.courseId,
         status: codeObj.status || 'active',
         createdAt: codeObj.createdAt || new Date().toISOString()
-      });
+      };
+
+      memoryActivationCodes.unshift(newCodeItem);
 
       const supabase = getSupabase();
       if (supabase) {
+        const crypto = require("crypto");
         const targetUuid = resolveCourseUuid(codeObj.courseId);
-        await supabase.from("enrollments").upsert({
-          user_email: (codeObj.userEmail || '').trim().toLowerCase(),
+        
+        const { error: insErr } = await supabase.from("enrollments").upsert({
+          id: crypto.randomUUID(),
+          user_email: cleanEmail,
           course_id: targetUuid,
-          activation_code: codeObj.code.trim().toUpperCase(),
+          activation_code: cleanCode,
           status: 'active'
         });
+
+        if (insErr) {
+          console.error("Supabase enrollment upsert error:", insErr.message);
+        }
       }
     }
 
     res.json({ success: true, message: "Activation code generated & saved to database." });
-  } catch (err) {
-    res.status(500).json({ success: false, error: "Failed to save code." });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || "Failed to save code." });
   }
 });
 
