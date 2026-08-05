@@ -30,6 +30,34 @@ function getSupabase() {
   return supabaseClient;
 }
 
+// Course ID to UUID Resolver Map for Supabase 3NF schema compliance
+const COURSE_ID_TO_UUID: Record<string, string> = {
+  'course_assoc_reactive_o11': '70daa8a9-20c7-4993-b292-54566ef12303',
+  'course_arch_odc': '56c652a7-7d07-41ea-bfe7-c19acd320420',
+  'course_agentic_ai_odc': '48ad6d82-3994-490a-a4f4-c07f0a7a38db',
+  'course_arch_o11': '2867b931-1550-424a-939e-99083bc56c12',
+  'course_security_o11': 'a57fa873-1082-4ef9-81fb-8b173bf23901',
+  'course_tech_lead_o11': '91bc8604-58a2-4a0b-bf11-48229a103211',
+  'course_mobile_o11': 'fe771120-410a-4859-994c-120019283401',
+  'course_web_o11': 'c9019208-1192-421b-8711-540192837101',
+  'course_frontend_o11': '89102931-1029-4102-8812-109283019201',
+  'course_delivery_o11': 'e1029381-1920-4102-9812-109283019201',
+  'course_platform_ops_o11': 'd0192831-1092-4102-9812-109283019201'
+};
+
+function resolveCourseUuid(cId: string): string {
+  if (COURSE_ID_TO_UUID[cId]) return COURSE_ID_TO_UUID[cId];
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cId)) {
+    return cId;
+  }
+  let hex = '';
+  for (let i = 0; i < cId.length; i++) {
+    hex += cId.charCodeAt(i).toString(16);
+  }
+  while (hex.length < 32) hex += '0';
+  return `${hex.substring(0, 8)}-${hex.substring(8, 12)}-4${hex.substring(13, 16)}-a${hex.substring(17, 20)}-${hex.substring(20, 32)}`;
+}
+
 // In-Memory Fallbacks for runtime session state
 const inMemoryCourseQuestions: Record<string, any[]> = {};
 const memoryUsers: any[] = [
@@ -62,7 +90,6 @@ app.get("/api/courses", async (req, res) => {
     if (supabase) {
       const { data, error } = await supabase.from("courses").select("*");
       if (!error && data && data.length > 0) {
-        // Sort by display_order if present
         coursesData = [...data].sort((a: any, b: any) => {
           const orderA = a.display_order !== undefined ? Number(a.display_order) : 999;
           const orderB = b.display_order !== undefined ? Number(b.display_order) : 999;
@@ -113,10 +140,12 @@ app.get("/api/courses", async (req, res) => {
       let imageUrl = item.image_url || item.imageUrl || item.image || (fallback ? fallback.imageUrl : "/src/assets/images/agentic_ai_1783426796399.jpg");
 
       // Check if memory has freshly imported questions for this course
-      let mockExam = inMemoryCourseQuestions[item.id];
+      let mockExam = inMemoryCourseQuestions[item.id] || inMemoryCourseQuestions[resolveCourseUuid(item.id)];
 
       if (!mockExam || mockExam.length === 0) {
-        const fromRelationalMe = relationalMockExams.filter((m: any) => m.course_id === item.id);
+        const targetUuid = resolveCourseUuid(item.id);
+        const fromRelationalMe = relationalMockExams.filter((m: any) => m.course_id === item.id || m.course_id === targetUuid);
+        
         if (fromRelationalMe.length > 0) {
           mockExam = fromRelationalMe.map((m: any) => ({
             id: m.id,
@@ -156,7 +185,7 @@ app.get("/api/courses", async (req, res) => {
   }
 });
 
-// STRICT USER AUTHENTICATION ENDPOINT (Item 4)
+// STRICT USER AUTHENTICATION ENDPOINT
 app.post("/api/auth/login", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -264,7 +293,7 @@ function requireAdminAuth(req: express.Request, res: express.Response, next: exp
   next();
 }
 
-// USER MANAGEMENT ENDPOINTS (Item 3)
+// USER MANAGEMENT ENDPOINTS
 app.get("/api/admin/users", requireAdminAuth, async (req, res) => {
   try {
     const supabase = getSupabase();
@@ -332,7 +361,6 @@ app.post("/api/admin/users/reset-code", requireAdminAuth, async (req, res) => {
   try {
     const { userEmail, courseId } = req.body;
     
-    // Revoke or delete activation code for this user/course
     for (let i = memoryActivationCodes.length - 1; i >= 0; i--) {
       if (memoryActivationCodes[i].userEmail === userEmail && memoryActivationCodes[i].courseId === courseId) {
         memoryActivationCodes[i].status = 'revoked';
@@ -341,8 +369,9 @@ app.post("/api/admin/users/reset-code", requireAdminAuth, async (req, res) => {
 
     const supabase = getSupabase();
     if (supabase) {
-      await supabase.from("orders").delete().eq("user_email", userEmail).eq("course_id", courseId);
-      await supabase.from("enrollments").delete().eq("user_email", userEmail).eq("course_id", courseId);
+      const targetUuid = resolveCourseUuid(courseId);
+      await supabase.from("orders").delete().eq("user_email", userEmail).eq("course_id", targetUuid);
+      await supabase.from("enrollments").delete().eq("user_email", userEmail).eq("course_id", targetUuid);
     }
 
     res.json({ success: true, message: `Reset & revoked activation code for user "${userEmail}"!` });
@@ -358,11 +387,12 @@ app.post("/api/admin/courses/upsert", requireAdminAuth, async (req, res) => {
     const supabase = getSupabase();
 
     if (supabase) {
+      const targetUuid = resolveCourseUuid(id);
       const platformTag = tags?.find((t: any) => t.text === 'O11' || t.text === 'ODC')?.text || 'O11';
       const isNewTag = tags?.some((t: any) => t.text === 'NEW') || false;
 
-      await supabase.from('courses').upsert({
-        id: id,
+      const { error } = await supabase.from('courses').upsert({
+        id: targetUuid,
         title: title,
         description: description,
         price: Number(price),
@@ -370,6 +400,10 @@ app.post("/api/admin/courses/upsert", requireAdminAuth, async (req, res) => {
         platform: platformTag,
         is_new: isNewTag
       });
+
+      if (error) {
+        console.error("Supabase course upsert note:", error.message);
+      }
     }
 
     res.json({ success: true, message: "Course details updated successfully in database!" });
@@ -378,7 +412,7 @@ app.post("/api/admin/courses/upsert", requireAdminAuth, async (req, res) => {
   }
 });
 
-// SAVE QUESTIONS ENDPOINT WITH IN-MEMORY & SUPABASE PERSISTENCE (Item 1)
+// SAVE QUESTIONS ENDPOINT WITH SUPABASE UUID COMPLIANCE
 app.post("/api/admin/questions/import", requireAdminAuth, async (req, res) => {
   try {
     const { courseId, questions } = req.body;
@@ -386,16 +420,19 @@ app.post("/api/admin/questions/import", requireAdminAuth, async (req, res) => {
       return res.status(400).json({ success: false, error: "Invalid payload." });
     }
 
-    // Always update in-memory question store so reload retains them!
+    const targetUuid = resolveCourseUuid(courseId);
     inMemoryCourseQuestions[courseId] = questions;
+    inMemoryCourseQuestions[targetUuid] = questions;
 
     const supabase = getSupabase();
 
     if (supabase) {
-      await supabase.from("mock_exam_questions").delete().eq("course_id", courseId);
+      // 1. Delete & Save in mock_exam_questions table using resolved UUID
+      const { error: delErr1 } = await supabase.from("mock_exam_questions").delete().eq("course_id", targetUuid);
+      if (delErr1) console.log("mock_exam_questions delete note:", delErr1.message);
 
       const mockPayload = questions.map((q: any) => ({
-        course_id: courseId,
+        course_id: targetUuid,
         question: q.question,
         choices: q.choices,
         correct_answer: q.correctAnswer || q.correct_answer,
@@ -405,13 +442,51 @@ app.post("/api/admin/questions/import", requireAdminAuth, async (req, res) => {
 
       for (let i = 0; i < mockPayload.length; i += 50) {
         const chunk = mockPayload.slice(i, i + 50);
-        await supabase.from("mock_exam_questions").insert(chunk);
+        const { error: insErr1 } = await supabase.from("mock_exam_questions").insert(chunk);
+        if (insErr1) console.error("mock_exam_questions insert error:", insErr1.message);
+      }
+
+      // 2. Delete & Save in 3NF refactored exam_questions table
+      const hex = targetUuid.replace(/-/g, '');
+      const examId = `${hex.substring(0, 8)}-${hex.substring(8, 12)}-4${hex.substring(13, 16)}-a${hex.substring(17, 20)}-${hex.substring(20, 32)}`;
+
+      await supabase.from("exam_questions").delete().eq("exam_id", examId);
+
+      const examPayload = questions.map((q: any) => ({
+        exam_id: examId,
+        question_text: q.question,
+        correct_answer: q.correctAnswer || q.correct_answer,
+        explanation: q.explanation || "Official OutSystems Exam Question",
+        image_url: q.imageUrl || q.image_url || null
+      }));
+
+      for (let i = 0; i < examPayload.length; i += 50) {
+        const chunk = examPayload.slice(i, i + 50);
+        const { data: insertedQs, error: insErr2 } = await supabase.from("exam_questions").insert(chunk).select();
+
+        if (insertedQs && !insErr2) {
+          const optionsPayload: any[] = [];
+          insertedQs.forEach((iq: any, idx: number) => {
+            const originalChoices = questions[i + idx]?.choices || [];
+            originalChoices.forEach((opt: any) => {
+              optionsPayload.push({
+                question_id: iq.id,
+                option_key: opt.key,
+                option_text: opt.text
+              });
+            });
+          });
+
+          if (optionsPayload.length > 0) {
+            await supabase.from("question_options").insert(optionsPayload);
+          }
+        }
       }
     }
 
     res.json({
       success: true,
-      message: `Successfully saved ${questions.length} questions to database!`
+      message: `Successfully saved ${questions.length} questions to Supabase database!`
     });
   } catch (err) {
     console.error("Save questions error:", err);
@@ -502,7 +577,7 @@ app.post("/api/verify-code", async (req, res) => {
   const cleanCode = (code || "").trim().toUpperCase();
 
   const foundCode = memoryActivationCodes.find(
-    (c) => c.code.toUpperCase() === cleanCode && c.courseId === courseId
+    (c) => c.code.toUpperCase() === cleanCode && (c.courseId === courseId || resolveCourseUuid(c.courseId) === resolveCourseUuid(courseId))
   );
 
   if (!foundCode) {
