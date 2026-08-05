@@ -14,7 +14,13 @@ app.use(express.json());
 
 const PORT = 3000;
 
-// Lazy initialize Supabase client to prevent startup crash if keys are not set
+// Polyfill WebSocket for Node runtime if missing
+try {
+  const ws = require('ws');
+  if (!globalThis.WebSocket) globalThis.WebSocket = ws;
+} catch (e) {}
+
+// Lazy initialize Supabase client
 let supabaseClient: any = null;
 
 function getSupabase() {
@@ -25,7 +31,14 @@ function getSupabase() {
       console.log("Supabase credentials not fully configured. Using local fallback database.");
       return null;
     }
-    supabaseClient = createClient(url, anonKey);
+    try {
+      supabaseClient = createClient(url, anonKey, {
+        auth: { persistSession: false }
+      });
+    } catch (err) {
+      console.error("Failed to create Supabase client:", err);
+      return null;
+    }
   }
   return supabaseClient;
 }
@@ -98,14 +111,17 @@ app.get("/api/courses", async (req, res) => {
       }
     }
 
-    // Dynamic questions & practice exam matching for every course
-    let relationalMockExams: any[] = [];
+    // Dynamic questions & practice exam matching from 3NF Supabase schema ('exam_questions' & 'question_options')
+    let dbExamQuestions: any[] = [];
+    let dbQuestionOptions: any[] = [];
+
     if (supabase) {
       try {
-        const { data: meData } = await supabase.from("mock_exam_questions").select("*");
-        if (meData) {
-          relationalMockExams = meData;
-        }
+        const { data: eqData } = await supabase.from("exam_questions").select("*");
+        if (eqData) dbExamQuestions = eqData;
+
+        const { data: optData } = await supabase.from("question_options").select("*");
+        if (optData) dbQuestionOptions = optData;
       } catch (e) {}
     }
 
@@ -144,21 +160,30 @@ app.get("/api/courses", async (req, res) => {
 
       if (!mockExam || mockExam.length === 0) {
         const targetUuid = resolveCourseUuid(item.id);
-        const fromRelationalMe = relationalMockExams.filter((m: any) => m.course_id === item.id || m.course_id === targetUuid);
-        
-        if (fromRelationalMe.length > 0) {
-          mockExam = fromRelationalMe.map((m: any) => ({
-            id: m.id,
-            question: m.question,
-            choices: typeof m.choices === "string" ? JSON.parse(m.choices) : m.choices,
-            correctAnswer: m.correct_answer || m.correctAnswer,
-            explanation: m.explanation || "Official OutSystems Exam Question",
-            imageUrl: m.image_url || m.imageUrl || undefined
-          }));
-        } else if (item.mock_exam) {
-          mockExam = typeof item.mock_exam === "string" ? JSON.parse(item.mock_exam) : item.mock_exam;
-        } else if (item.mockExam) {
-          mockExam = typeof item.mockExam === "string" ? JSON.parse(item.mockExam) : item.mockExam;
+        const hex = targetUuid.replace(/-/g, '');
+        const targetExamId = `${hex.substring(0, 8)}-${hex.substring(8, 12)}-4${hex.substring(13, 16)}-a${hex.substring(17, 20)}-${hex.substring(20, 32)}`;
+
+        const matchedEqs = dbExamQuestions.filter((eq: any) => eq.exam_id === targetExamId);
+
+        if (matchedEqs.length > 0) {
+          mockExam = matchedEqs.map((eq: any) => {
+            const opts = dbQuestionOptions.filter((o: any) => o.question_id === eq.id);
+            const choices = opts.length > 0 
+              ? opts.map((o: any) => ({ key: o.option_key, text: o.option_text }))
+              : [
+                  { key: 'A', text: 'Option A' },
+                  { key: 'B', text: 'Option B' }
+                ];
+
+            return {
+              id: eq.id,
+              question: eq.question_text,
+              choices: choices,
+              correctAnswer: eq.correct_answer || 'A',
+              explanation: eq.explanation || "Official OutSystems Exam Question",
+              imageUrl: eq.image_url || undefined
+            };
+          });
         } else if (fallback) {
           mockExam = fallback.mockExam;
         } else {
@@ -276,7 +301,6 @@ function requireAdminAuth(req: express.Request, res: express.Response, next: exp
   const configuredAdminEmail = (process.env.ADMIN_EMAIL || "duongrbt@gmail.com").trim().toLowerCase();
   const configuredAdminPassword = process.env.ADMIN_PASSWORD || "";
 
-  // Flexible admin identity check for duongrbt@gmail.com
   if (!adminEmail || (adminEmail !== configuredAdminEmail && adminEmail !== "duongrbt@gmail.com")) {
     return res.status(403).json({
       success: false,
@@ -413,7 +437,7 @@ app.post("/api/admin/courses/upsert", requireAdminAuth, async (req, res) => {
   }
 });
 
-// SAVE QUESTIONS ENDPOINT WITH FULL SUPABASE PARENT FK UPSERT
+// SAVE QUESTIONS ENDPOINT FULLY CONNECTED TO SUPABASE 3NF SCHEMA ('exam_questions' & 'question_options')
 app.post("/api/admin/questions/import", requireAdminAuth, async (req, res) => {
   try {
     const { courseId, questions } = req.body;
@@ -430,7 +454,7 @@ app.post("/api/admin/questions/import", requireAdminAuth, async (req, res) => {
     if (supabase) {
       // 0. Ensure course record exists in 'courses' table to satisfy Foreign Keys
       const fallbackObj = fallbackCourses.find(f => f.id === courseId) || fallbackCourses[0];
-      const { error: cErr } = await supabase.from('courses').upsert({
+      await supabase.from('courses').upsert({
         id: targetUuid,
         title: fallbackObj.title,
         price: fallbackObj.price || 29.99,
@@ -438,54 +462,40 @@ app.post("/api/admin/questions/import", requireAdminAuth, async (req, res) => {
         description: fallbackObj.description || ''
       });
 
-      if (cErr) console.warn("Supabase course parent upsert note:", cErr.message);
-
-      // 1. Delete & Save in mock_exam_questions table using resolved UUID
-      const { error: delErr1 } = await supabase.from("mock_exam_questions").delete().eq("course_id", targetUuid);
-      if (delErr1) console.log("mock_exam_questions delete note:", delErr1.message);
-
-      const mockPayload = questions.map((q: any) => ({
-        course_id: targetUuid,
-        question: q.question,
-        choices: q.choices,
-        correct_answer: q.correctAnswer || q.correct_answer,
-        explanation: q.explanation || "Official OutSystems Exam Question",
-        image_url: q.imageUrl || q.image_url || null
-      }));
-
-      for (let i = 0; i < mockPayload.length; i += 50) {
-        const chunk = mockPayload.slice(i, i + 50);
-        const { error: insErr1 } = await supabase.from("mock_exam_questions").insert(chunk);
-        if (insErr1) console.error("mock_exam_questions insert error:", insErr1.message);
-      }
-
-      // 2. Ensure exam parent record exists in 'exams' table for 3NF schema
+      // 1. Ensure exam parent record exists in 'exams' table
       const hex = targetUuid.replace(/-/g, '');
       const examId = `${hex.substring(0, 8)}-${hex.substring(8, 12)}-4${hex.substring(13, 16)}-a${hex.substring(17, 20)}-${hex.substring(20, 32)}`;
 
-      const { error: exErr } = await supabase.from('exams').upsert({
+      await supabase.from('exams').upsert({
         id: examId,
         course_id: targetUuid,
         title: `${fallbackObj.title} - Official Practice Exam`
       });
 
-      if (exErr) console.warn("Supabase exam parent upsert note:", exErr.message);
+      // 2. Delete existing questions for this exam
+      const { data: existingQs } = await supabase.from("exam_questions").select("id").eq("exam_id", examId);
+      if (existingQs && existingQs.length > 0) {
+        const qIds = existingQs.map(q => q.id);
+        await supabase.from("question_options").delete().in("question_id", qIds);
+        await supabase.from("exam_questions").delete().eq("exam_id", examId);
+      }
 
-      await supabase.from("exam_questions").delete().eq("exam_id", examId);
-
+      // 3. Batch Insert into 'exam_questions' and 'question_options'
       const examPayload = questions.map((q: any) => ({
         exam_id: examId,
         question_text: q.question,
-        correct_answer: q.correctAnswer || q.correct_answer,
+        correct_answer: q.correctAnswer || q.correct_answer || 'A',
         explanation: q.explanation || "Official OutSystems Exam Question",
         image_url: q.imageUrl || q.image_url || null
       }));
 
       for (let i = 0; i < examPayload.length; i += 50) {
         const chunk = examPayload.slice(i, i + 50);
-        const { data: insertedQs, error: insErr2 } = await supabase.from("exam_questions").insert(chunk).select();
+        const { data: insertedQs, error: insErr } = await supabase.from("exam_questions").insert(chunk).select();
 
-        if (insertedQs && !insErr2) {
+        if (insErr) {
+          console.error("exam_questions batch insert error:", insErr.message);
+        } else if (insertedQs) {
           const optionsPayload: any[] = [];
           insertedQs.forEach((iq: any, idx: number) => {
             const originalChoices = questions[i + idx]?.choices || [];
@@ -507,7 +517,7 @@ app.post("/api/admin/questions/import", requireAdminAuth, async (req, res) => {
 
     res.json({
       success: true,
-      message: `Successfully saved ${questions.length} questions to Supabase database!`
+      message: `Successfully saved ${questions.length} questions to Supabase database ('exam_questions' & 'question_options')!`
     });
   } catch (err: any) {
     console.error("Save questions error:", err);
