@@ -458,9 +458,13 @@ export default function AdminDashboard({
         })
       });
       const data = await res.json();
-      setCsvMessage(`✅ ${data.message || `Successfully saved ${questionsToSave.length} questions to Supabase!`}`);
-    } catch (err) {
-      setCsvMessage(`Saved ${questionsToSave.length} questions to local session.`);
+      if (!res.ok || !data.success) {
+        setCsvMessage(`❌ Save Note: ${data.error || data.message || 'Server error while saving to database.'}`);
+      } else {
+        setCsvMessage(`✅ ${data.message || `Successfully saved ${questionsToSave.length} questions to Supabase!`}`);
+      }
+    } catch (err: any) {
+      setCsvMessage(`❌ Error: ${err.message || 'Network error while saving'}`);
     } finally {
       setIsSavingQuestions(false);
     }
