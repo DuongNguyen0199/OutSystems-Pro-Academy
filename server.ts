@@ -497,6 +497,37 @@ function requireAdminAuth(req: express.Request, res: express.Response, next: exp
   next();
 }
 
+// Course Management Endpoint (Role: Admin ONLY)
+app.post("/api/admin/courses/upsert", requireAdminAuth, async (req, res) => {
+  try {
+    const { id, title, description, price, imageUrl, tags } = req.body;
+    const supabase = getSupabase();
+
+    if (supabase) {
+      const platformTag = tags?.find((t: any) => t.text === 'O11' || t.text === 'ODC')?.text || 'O11';
+      const isNewTag = tags?.some((t: any) => t.text === 'NEW') || false;
+
+      const { error } = await supabase.from('courses').upsert({
+        id: id,
+        title: title,
+        description: description,
+        price: Number(price),
+        image_url: imageUrl,
+        platform: platformTag,
+        is_new: isNewTag
+      });
+
+      if (error) {
+        console.error("Supabase course upsert error:", error);
+      }
+    }
+
+    res.json({ success: true, message: "Course details updated successfully in database!" });
+  } catch (err) {
+    res.status(500).json({ success: false, error: "Failed to update course details." });
+  }
+});
+
 // Notification Settings Management Endpoint (Role: Admin ONLY)
 app.get("/api/admin/notification-settings", requireAdminAuth, (req, res) => {
   res.json({
