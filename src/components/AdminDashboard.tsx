@@ -178,13 +178,17 @@ export default function AdminDashboard({
         })
       });
       const data = await res.json();
-      setUserRegisterMsg(data.message || 'User registered successfully!');
-      fetchUsers();
-      setNewUserEmail('');
-      setNewUserPassword('');
-      setNewUserFullName('');
-    } catch (err) {
-      setUserRegisterMsg('Failed to register user.');
+      if (!res.ok || !data.success) {
+        setUserRegisterMsg(`❌ ${data.error || 'Failed to register user.'}`);
+      } else {
+        setUserRegisterMsg(`✅ ${data.message || 'User registered successfully!'}`);
+        fetchUsers();
+        setNewUserEmail('');
+        setNewUserPassword('');
+        setNewUserFullName('');
+      }
+    } catch (err: any) {
+      setUserRegisterMsg(`❌ Error: ${err.message || 'Network error'}`);
     }
   };
 

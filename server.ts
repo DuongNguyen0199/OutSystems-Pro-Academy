@@ -352,8 +352,11 @@ app.post("/api/admin/users/create", requireAdminAuth, async (req, res) => {
       return res.status(400).json({ success: false, error: "Email and password are required." });
     }
 
+    const crypto = require("crypto");
+    const userUuid = crypto.randomUUID();
+
     const newUser = {
-      id: "usr_" + Date.now(),
+      id: userUuid,
       email: email.trim().toLowerCase(),
       password: password.trim(),
       fullName: fullName ? fullName.trim() : email.split('@')[0],
@@ -366,19 +369,22 @@ app.post("/api/admin/users/create", requireAdminAuth, async (req, res) => {
 
     const supabase = getSupabase();
     if (supabase) {
-      await supabase.from("users").upsert({
+      const { error: userErr } = await supabase.from("users").upsert({
         id: newUser.id,
         email: newUser.email,
-        password: newUser.password,
-        full_name: newUser.fullName,
         role: newUser.role,
         status: newUser.status
       });
+
+      if (userErr) {
+        console.error("Supabase user upsert error:", userErr.message);
+      }
     }
 
-    res.json({ success: true, message: `Registered user account "${newUser.email}" successfully!`, user: newUser });
-  } catch (err) {
-    res.status(500).json({ success: false, error: "Failed to register user." });
+    res.json({ success: true, message: `Registered user account "${newUser.email}" successfully in Supabase database!`, user: newUser });
+  } catch (err: any) {
+    console.error("Register user error:", err);
+    res.status(500).json({ success: false, error: err.message || "Failed to register user." });
   }
 });
 
