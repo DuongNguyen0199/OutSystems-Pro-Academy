@@ -1,4 +1,3 @@
-const { createClient } = require('@supabase/supabase-js');
 const fs = require('fs');
 const path = require('path');
 const dotenv = require('dotenv');
@@ -16,7 +15,6 @@ if (!supabaseUrl || !supabaseKey) {
   process.exit(1);
 }
 
-const supabase = createClient(supabaseUrl, supabaseKey);
 const rootDir = 'C:\\Users\\nguye\\Desktop\\Udemy\\Outsystems Experiences';
 
 function parseCsvFile(filePath) {
@@ -115,6 +113,32 @@ const coursesData = [
 ];
 
 async function seedSupabase() {
+  // Ensure fetch is available on Node < 18
+  if (typeof globalThis.fetch === 'undefined') {
+    const nodeFetch = await import('node-fetch');
+    globalThis.fetch = nodeFetch.default || nodeFetch;
+    if (typeof globalThis.Headers === 'undefined') {
+      globalThis.Headers = nodeFetch.Headers;
+    }
+  }
+
+  if (typeof globalThis.WebSocket === 'undefined') {
+    class DummyWebSocket {
+      constructor() {}
+      on() {}
+      close() {}
+      addEventListener() {}
+      removeEventListener() {}
+    }
+    globalThis.WebSocket = DummyWebSocket;
+  }
+
+  const { createClient } = require('@supabase/supabase-js');
+  const supabase = createClient(supabaseUrl, supabaseKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    realtime: { transport: null }
+  });
+
   console.log(`📡 Connecting to Supabase at: ${supabaseUrl}`);
 
   // 1. Upsert Admin User into 'users'

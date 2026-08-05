@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS public.users (
 );
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow public access to users" ON public.users;
-CREATE POLICY "Allow public access to users" ON public.users FOR ALL USING (true);
+CREATE POLICY "Allow public access to users" ON public.users FOR ALL USING (true) WITH CHECK (true);
 
 -- 2. Courses Table
 CREATE TABLE IF NOT EXISTS public.courses (
@@ -27,8 +27,8 @@ CREATE TABLE IF NOT EXISTS public.courses (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 ALTER TABLE public.courses ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Allow public read access to courses" ON public.courses;
-CREATE POLICY "Allow public read access to courses" ON public.courses FOR SELECT TO anon USING (true);
+DROP POLICY IF EXISTS "Allow public access to courses" ON public.courses;
+CREATE POLICY "Allow public access to courses" ON public.courses FOR ALL USING (true) WITH CHECK (true);
 
 -- 3. Exams Table (Each course can have 1 or more practice exam sets)
 CREATE TABLE IF NOT EXISTS public.exams (
@@ -40,8 +40,8 @@ CREATE TABLE IF NOT EXISTS public.exams (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 ALTER TABLE public.exams ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Allow public read access to exams" ON public.exams;
-CREATE POLICY "Allow public read access to exams" ON public.exams FOR SELECT TO anon USING (true);
+DROP POLICY IF EXISTS "Allow public access to exams" ON public.exams;
+CREATE POLICY "Allow public access to exams" ON public.exams FOR ALL USING (true) WITH CHECK (true);
 
 -- 4. Exam Questions Table
 CREATE TABLE IF NOT EXISTS public.exam_questions (
@@ -54,8 +54,8 @@ CREATE TABLE IF NOT EXISTS public.exam_questions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 ALTER TABLE public.exam_questions ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Allow public read access to exam_questions" ON public.exam_questions;
-CREATE POLICY "Allow public read access to exam_questions" ON public.exam_questions FOR SELECT TO anon USING (true);
+DROP POLICY IF EXISTS "Allow public access to exam_questions" ON public.exam_questions;
+CREATE POLICY "Allow public access to exam_questions" ON public.exam_questions FOR ALL USING (true) WITH CHECK (true);
 
 -- 5. Question Options Table (Normalized Choices)
 CREATE TABLE IF NOT EXISTS public.question_options (
@@ -65,8 +65,8 @@ CREATE TABLE IF NOT EXISTS public.question_options (
     option_text TEXT NOT NULL
 );
 ALTER TABLE public.question_options ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Allow public read access to question_options" ON public.question_options;
-CREATE POLICY "Allow public read access to question_options" ON public.question_options FOR SELECT TO anon USING (true);
+DROP POLICY IF EXISTS "Allow public access to question_options" ON public.question_options;
+CREATE POLICY "Allow public access to question_options" ON public.question_options FOR ALL USING (true) WITH CHECK (true);
 
 -- 6. Orders Table (Users -> Orders)
 CREATE TABLE IF NOT EXISTS public.orders (
@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS public.orders (
 );
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow public access to orders" ON public.orders;
-CREATE POLICY "Allow public access to orders" ON public.orders FOR ALL USING (true);
+CREATE POLICY "Allow public access to orders" ON public.orders FOR ALL USING (true) WITH CHECK (true);
 
 -- 7. Enrollments Table (Users <-> Enrollments <-> Courses & Activation Codes)
 CREATE TABLE IF NOT EXISTS public.enrollments (
@@ -97,7 +97,7 @@ CREATE TABLE IF NOT EXISTS public.enrollments (
 );
 ALTER TABLE public.enrollments ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow public access to enrollments" ON public.enrollments;
-CREATE POLICY "Allow public access to enrollments" ON public.enrollments FOR ALL USING (true);
+CREATE POLICY "Allow public access to enrollments" ON public.enrollments FOR ALL USING (true) WITH CHECK (true);
 
 -- 8. Exam Attempts Table (Users <-> ExamAttempts <-> Exams)
 CREATE TABLE IF NOT EXISTS public.exam_attempts (
@@ -111,7 +111,7 @@ CREATE TABLE IF NOT EXISTS public.exam_attempts (
 );
 ALTER TABLE public.exam_attempts ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow public access to exam_attempts" ON public.exam_attempts;
-CREATE POLICY "Allow public access to exam_attempts" ON public.exam_attempts FOR ALL USING (true);
+CREATE POLICY "Allow public access to exam_attempts" ON public.exam_attempts FOR ALL USING (true) WITH CHECK (true);
 
 -- 9. Reviews Table (Users <-> Reviews <-> Courses)
 CREATE TABLE IF NOT EXISTS public.reviews (
@@ -124,4 +124,4 @@ CREATE TABLE IF NOT EXISTS public.reviews (
 );
 ALTER TABLE public.reviews ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow public access to reviews" ON public.reviews;
-CREATE POLICY "Allow public access to reviews" ON public.reviews FOR ALL USING (true);
+CREATE POLICY "Allow public access to reviews" ON public.reviews FOR ALL USING (true) WITH CHECK (true);
