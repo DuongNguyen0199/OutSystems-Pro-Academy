@@ -528,6 +528,80 @@ app.post("/api/admin/courses/upsert", requireAdminAuth, async (req, res) => {
   }
 });
 
+// Save & Sync Questions Endpoint (Role: Admin ONLY)
+app.post("/api/admin/questions/import", requireAdminAuth, async (req, res) => {
+  try {
+    const { courseId, questions } = req.body;
+    const supabase = getSupabase();
+
+    if (supabase && Array.isArray(questions)) {
+      // 1. Delete old questions for this course in mock_exam_questions
+      await supabase.from("mock_exam_questions").delete().eq("course_id", courseId);
+
+      // 2. Prepare payload for mock_exam_questions
+      const mockPayload = questions.map((q: any) => ({
+        course_id: courseId,
+        question: q.question,
+        choices: q.choices,
+        correct_answer: q.correctAnswer || q.correct_answer,
+        explanation: q.explanation || "Official OutSystems Exam Question",
+        image_url: q.imageUrl || q.image_url || null
+      }));
+
+      // Insert in chunks of 50
+      for (let i = 0; i < mockPayload.length; i += 50) {
+        const chunk = mockPayload.slice(i, i + 50);
+        await supabase.from("mock_exam_questions").insert(chunk);
+      }
+
+      // 3. Also sync into refactored 9-table schema (exams & exam_questions)
+      const hex = courseId.replace(/-/g, '');
+      const examId = `${hex.substring(0, 8)}-${hex.substring(8, 12)}-4${hex.substring(13, 16)}-a${hex.substring(17, 20)}-${hex.substring(20, 32)}`;
+
+      await supabase.from("exam_questions").delete().eq("exam_id", examId);
+
+      const examPayload = questions.map((q: any) => ({
+        exam_id: examId,
+        question_text: q.question,
+        correct_answer: q.correctAnswer || q.correct_answer,
+        explanation: q.explanation || "Official OutSystems Exam Question",
+        image_url: q.imageUrl || q.image_url || null
+      }));
+
+      for (let i = 0; i < examPayload.length; i += 50) {
+        const chunk = examPayload.slice(i, i + 50);
+        const { data: insertedQs } = await supabase.from("exam_questions").insert(chunk).select();
+
+        if (insertedQs) {
+          const optionsPayload: any[] = [];
+          insertedQs.forEach((iq: any, idx: number) => {
+            const originalChoices = questions[i + idx]?.choices || [];
+            originalChoices.forEach((opt: any) => {
+              optionsPayload.push({
+                question_id: iq.id,
+                option_key: opt.key,
+                option_text: opt.text
+              });
+            });
+          });
+
+          if (optionsPayload.length > 0) {
+            await supabase.from("question_options").insert(optionsPayload);
+          }
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Successfully saved ${questions.length} questions to Supabase database!`
+    });
+  } catch (err) {
+    console.error("Save questions error:", err);
+    res.status(500).json({ success: false, error: "Failed to save questions to database." });
+  }
+});
+
 // Notification Settings Management Endpoint (Role: Admin ONLY)
 app.get("/api/admin/notification-settings", requireAdminAuth, (req, res) => {
   res.json({

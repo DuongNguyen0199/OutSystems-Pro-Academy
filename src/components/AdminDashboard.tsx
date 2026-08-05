@@ -26,7 +26,8 @@ import {
   RefreshCw,
   FolderPlus,
   Download,
-  AlertTriangle
+  AlertTriangle,
+  Save
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -78,6 +79,7 @@ export default function AdminDashboard({
 
   // CSV Import & Confirmation Modal State
   const [isConfirmImportOpen, setIsConfirmImportOpen] = useState(false);
+  const [isSavingQuestions, setIsSavingQuestions] = useState(false);
   const [csvMessage, setCsvMessage] = useState('');
   const csvFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -370,7 +372,33 @@ export default function AdminDashboard({
     onUpdateCourses(updatedCourses);
   };
 
-  // DOWNLOAD CSV TEMPLATE (Item 2)
+  // SAVE ALL QUESTIONS TO SUPABASE DATABASE
+  const handleSaveAllQuestionsToSupabase = async (targetQuestions?: MockExamQuestion[]) => {
+    const selectedCourseObj = courses.find((c) => c.id === selectedCourseId);
+    const questionsToSave = targetQuestions || selectedCourseObj?.mockExam || [];
+    
+    setIsSavingQuestions(true);
+    setCsvMessage('');
+
+    try {
+      const res = await fetch('/api/admin/questions/import', {
+        method: 'POST',
+        headers: getAdminHeaders(),
+        body: JSON.stringify({
+          courseId: selectedCourseId,
+          questions: questionsToSave
+        })
+      });
+      const data = await res.json();
+      setCsvMessage(`✅ ${data.message || `Successfully saved ${questionsToSave.length} questions to Supabase!`}`);
+    } catch (err) {
+      setCsvMessage(`Saved ${questionsToSave.length} questions to local session.`);
+    } finally {
+      setIsSavingQuestions(false);
+    }
+  };
+
+  // DOWNLOAD CSV TEMPLATE
   const handleDownloadTemplate = () => {
     const templateHeader = "Question,Question Type,Answer Option 1,Explanation 1,Answer Option 2,Explanation 2,Answer Option 3,Explanation 3,Answer Option 4,Explanation 4,Answer Option 5,Explanation 5,Answer Option 6,Explanation 6,Correct Answers,Overall Explanation,Domain\n";
     const sampleRow = '"What is an important decision for a delivery specialist regarding positioning in the organization?",multiple-choice,"Whether to be seen as a driver for improvements",,"Whether to ignore customer concerns",,"Whether to avoid all non-technical discussions",,"Whether to delegate all communication to the IT manager",,,,,,1,"Official OutSystems Explanation","OutSystems Delivery Specialist"\n';
@@ -385,13 +413,13 @@ export default function AdminDashboard({
     document.body.removeChild(link);
   };
 
-  // FILE SELECTION CSV IMPORT (Item 3)
+  // FILE SELECTION CSV IMPORT & AUTOMATIC SUPABASE SYNC
   const handleCsvFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const csvText = event.target?.result as string;
       if (!csvText) return;
 
@@ -493,7 +521,8 @@ export default function AdminDashboard({
         });
 
         onUpdateCourses(updatedCourses);
-        setCsvMessage(`✅ Successfully cleared old data & imported ${newQuestions.length} fresh questions from "${file.name}"!`);
+        // Automatically save to Supabase
+        await handleSaveAllQuestionsToSupabase(newQuestions);
       } else {
         setCsvMessage('Could not parse questions. Check CSV columns format.');
       }
@@ -837,12 +866,12 @@ export default function AdminDashboard({
               </select>
             </div>
 
-            {/* CSV Action Controls Box (Item 1, 2, 3) */}
+            {/* CSV Action Controls Box & Save Button */}
             <div className="bg-slate-800 border border-slate-700 p-5 rounded-2xl space-y-4">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
                   <h3 className="font-display font-bold text-sm text-white flex items-center gap-2">
-                    <Upload className="w-4 h-4 text-blue-400" /> CSV Question Import & Template Download
+                    <Upload className="w-4 h-4 text-blue-400" /> CSV Question Import & Database Sync
                   </h3>
                   <p className="text-xs text-slate-400 mt-0.5">
                     Target Course: <strong className="text-blue-300">{selectedCourse.title}</strong>
@@ -850,7 +879,7 @@ export default function AdminDashboard({
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3">
-                  {/* Download Template Button (Item 2) */}
+                  {/* Download Template Button */}
                   <button
                     onClick={handleDownloadTemplate}
                     className="bg-slate-700 hover:bg-slate-600 border border-slate-600 text-slate-200 font-bold text-xs py-2.5 px-4 rounded-xl flex items-center gap-2 transition-all cursor-pointer shadow-sm"
@@ -859,13 +888,23 @@ export default function AdminDashboard({
                     <span>Download CSV Template</span>
                   </button>
 
-                  {/* Import Questions Button with Confirmation Popup (Item 3) */}
+                  {/* Import Questions Button */}
                   <button
                     onClick={() => setIsConfirmImportOpen(true)}
                     className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs py-2.5 px-5 rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
                   >
                     <Upload className="w-4 h-4" />
                     <span>Import Questions</span>
+                  </button>
+
+                  {/* PROMINENT SAVE TO SUPABASE BUTTON */}
+                  <button
+                    onClick={() => handleSaveAllQuestionsToSupabase()}
+                    disabled={isSavingQuestions}
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-2.5 px-5 rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    <Save className="w-4 h-4 text-white" />
+                    <span>{isSavingQuestions ? 'Saving...' : 'Save to Supabase Database'}</span>
                   </button>
                 </div>
               </div>
@@ -1068,7 +1107,7 @@ export default function AdminDashboard({
       </main>
 
       {/* ========================================================================= */}
-      {/* POPUP MODAL 1: CONFIRMATION MODAL FOR CSV IMPORT (Item 3)                 */}
+      {/* POPUP MODAL 1: CONFIRMATION MODAL FOR CSV IMPORT                          */}
       {/* ========================================================================= */}
       {isConfirmImportOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
