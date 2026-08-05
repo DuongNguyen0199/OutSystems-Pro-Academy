@@ -23,7 +23,8 @@ import {
   Search,
   CheckCircle2,
   Trash2,
-  RefreshCw
+  RefreshCw,
+  FolderPlus
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -51,7 +52,8 @@ export default function AdminDashboard({
   const [generatedCodeResult, setGeneratedCodeResult] = useState<string | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
 
-  // Question editing drawer state
+  // Question Editing Popup Modal State
+  const [isQuestionModalOpen, setIsQuestionModalOpen] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState<MockExamQuestion | null>(null);
   const [qText, setQText] = useState('');
   const [choiceA, setChoiceA] = useState('');
@@ -62,7 +64,7 @@ export default function AdminDashboard({
   const [explanationText, setExplanationText] = useState('');
   const [imgUrl, setImgUrl] = useState('');
 
-  // Course editing state
+  // Course Editing Popup Modal State
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editDescription, setEditDescription] = useState('');
@@ -130,6 +132,7 @@ export default function AdminDashboard({
       .catch(() => {});
   }, [courses]);
 
+  // Open Course Edit Popup Modal
   const handleOpenCourseEditor = (c: Course) => {
     setEditingCourse(c);
     setEditTitle(c.title);
@@ -140,6 +143,34 @@ export default function AdminDashboard({
     setEditPlatform(platformTag as 'O11' | 'ODC');
     setEditIsNew(c.tags.some(t => t.text === 'NEW'));
     setCourseSaveMsg('');
+  };
+
+  // Handle Course Cover Image File Import (Local Binary Base64)
+  const handleCourseImageFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (reader.result) {
+          setEditImageUrl(reader.result as string);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Handle Question Diagram Image File Import (Local Binary Base64)
+  const handleQuestionImageFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (reader.result) {
+          setImgUrl(reader.result as string);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleSaveCourseEdits = async (e: React.FormEvent) => {
@@ -175,7 +206,7 @@ export default function AdminDashboard({
       setTimeout(() => {
         setEditingCourse(null);
         setCourseSaveMsg('');
-      }, 1200);
+      }, 1000);
     }
   };
 
@@ -260,6 +291,33 @@ export default function AdminDashboard({
     }).catch(() => {});
   };
 
+  // Open Question Edit Modal
+  const handleOpenAddQuestion = () => {
+    setEditingQuestion(null);
+    setQText('');
+    setChoiceA('');
+    setChoiceB('');
+    setChoiceC('');
+    setChoiceD('');
+    setCorrectAns('A');
+    setExplanationText('');
+    setImgUrl('');
+    setIsQuestionModalOpen(true);
+  };
+
+  const handleOpenEditQuestion = (q: MockExamQuestion) => {
+    setEditingQuestion(q);
+    setQText(q.question);
+    setChoiceA(q.choices.find((c) => c.key === 'A')?.text || '');
+    setChoiceB(q.choices.find((c) => c.key === 'B')?.text || '');
+    setChoiceC(q.choices.find((c) => c.key === 'C')?.text || '');
+    setChoiceD(q.choices.find((c) => c.key === 'D')?.text || '');
+    setCorrectAns(q.correctAnswer);
+    setExplanationText(q.explanation);
+    setImgUrl(q.imageUrl || '');
+    setIsQuestionModalOpen(true);
+  };
+
   const handleSaveQuestion = (e: React.FormEvent) => {
     e.preventDefault();
     if (!qText || !choiceA || !choiceB) return;
@@ -292,26 +350,7 @@ export default function AdminDashboard({
     });
 
     onUpdateCourses(updatedCourses);
-    setEditingQuestion(null);
-    setQText('');
-    setChoiceA('');
-    setChoiceB('');
-    setChoiceC('');
-    setChoiceD('');
-    setExplanationText('');
-    setImgUrl('');
-  };
-
-  const handleOpenEditModal = (q: MockExamQuestion) => {
-    setEditingQuestion(q);
-    setQText(q.question);
-    setChoiceA(q.choices.find((c) => c.key === 'A')?.text || '');
-    setChoiceB(q.choices.find((c) => c.key === 'B')?.text || '');
-    setChoiceC(q.choices.find((c) => c.key === 'C')?.text || '');
-    setChoiceD(q.choices.find((c) => c.key === 'D')?.text || '');
-    setCorrectAns(q.correctAnswer);
-    setExplanationText(q.explanation);
-    setImgUrl(q.imageUrl || '');
+    setIsQuestionModalOpen(false);
   };
 
   const handleDeleteQuestion = (id: string) => {
@@ -328,7 +367,7 @@ export default function AdminDashboard({
     onUpdateCourses(updatedCourses);
   };
 
-  // ENHANCED MULTI-FORMAT CSV PARSER (Supports both standard & Delivery/RBT/1.csv layout)
+  // ENHANCED CSV PARSER (Clears old questions, creating fresh question bank)
   const handleImportCsv = () => {
     if (!csvContent.trim()) return;
     
@@ -421,15 +460,16 @@ export default function AdminDashboard({
     }
 
     if (newQuestions.length > 0) {
+      // REPLACES ALL OLD QUESTIONS WITH FRESH NEW CSV QUESTIONS
       const updatedCourses = courses.map((c) => {
         if (c.id === selectedCourseId) {
-          return { ...c, mockExam: [...(c.mockExam || []), ...newQuestions] };
+          return { ...c, mockExam: newQuestions };
         }
         return c;
       });
 
       onUpdateCourses(updatedCourses);
-      setCsvMessage(`Successfully imported ${newQuestions.length} questions into selected course!`);
+      setCsvMessage(`Successfully cleared old data & imported ${newQuestions.length} fresh questions!`);
       setCsvContent('');
     } else {
       setCsvMessage('Could not parse questions. Check CSV columns format.');
@@ -443,7 +483,7 @@ export default function AdminDashboard({
   );
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans relative">
       
       {/* Top Navbar */}
       <header className="bg-slate-950 border-b border-slate-800 px-6 py-4 flex items-center justify-between sticky top-0 z-30 shadow-md">
@@ -541,7 +581,7 @@ export default function AdminDashboard({
                   Course Catalog & Pricing Management
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">
-                  Manage title, description, price, platform, and cover image for all OutSystems certification courses.
+                  Click "Edit Details" on any course to open the interactive editor popup modal.
                 </p>
               </div>
 
@@ -564,6 +604,7 @@ export default function AdminDashboard({
                         alt={c.title}
                         className="w-full h-full object-cover"
                         referrerPolicy="no-referrer"
+                        onError={(e) => { (e.target as any).src = 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=600&auto=format&fit=crop&q=80'; }}
                       />
                       <div className="absolute top-2 right-2 bg-slate-950/80 backdrop-blur-xs font-mono font-extrabold text-sm text-emerald-400 px-3 py-1 rounded-lg border border-emerald-500/30">
                         ${c.price}
@@ -596,128 +637,11 @@ export default function AdminDashboard({
                     onClick={() => handleOpenCourseEditor(c)}
                     className="w-full bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/40 hover:border-blue-600 font-bold text-xs py-2.5 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    <Edit2 className="w-3.5 h-3.5" /> Edit Course Details
+                    <Edit2 className="w-3.5 h-3.5" /> Edit Details
                   </button>
                 </div>
               ))}
             </div>
-
-            {/* FULL-PAGE COURSE EDITOR DRAWER / PANEL */}
-            {editingCourse && (
-              <div className="bg-slate-800 border-2 border-blue-500 rounded-3xl p-6 shadow-2xl space-y-5 animate-in slide-in-from-bottom-4 duration-200">
-                <div className="flex items-center justify-between border-b border-slate-700 pb-4">
-                  <h3 className="font-display font-bold text-base text-white flex items-center gap-2">
-                    <Edit2 className="w-5 h-5 text-blue-400" />
-                    Editing Course: <span className="text-blue-300">{editingCourse.title}</span>
-                  </h3>
-                  <button
-                    onClick={() => setEditingCourse(null)}
-                    className="text-slate-400 hover:text-white p-1 hover:bg-slate-700 rounded-full"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-
-                {courseSaveMsg && (
-                  <div className="bg-emerald-900/40 text-emerald-300 text-xs p-3 rounded-xl border border-emerald-500/50 font-bold flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" /> {courseSaveMsg}
-                  </div>
-                )}
-
-                <form onSubmit={handleSaveCourseEdits} className="space-y-5">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="md:col-span-2 space-y-1.5">
-                      <label className="text-xs font-bold text-slate-300">Course Title</label>
-                      <input
-                        type="text"
-                        required
-                        value={editTitle}
-                        onChange={(e) => setEditTitle(e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-white outline-none focus:border-blue-500 font-medium"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-300">Price ($ USD)</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        required
-                        value={editPrice}
-                        onChange={(e) => setEditPrice(parseFloat(e.target.value))}
-                        className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-emerald-400 font-mono font-extrabold outline-none focus:border-blue-500"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-300">Course Description</label>
-                    <textarea
-                      rows={3}
-                      value={editDescription}
-                      onChange={(e) => setEditDescription(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-slate-200 outline-none focus:border-blue-500 leading-relaxed"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
-                    <div className="md:col-span-2 space-y-1.5">
-                      <label className="text-xs font-bold text-slate-300">Cover Image URL</label>
-                      <input
-                        type="text"
-                        value={editImageUrl}
-                        onChange={(e) => setEditImageUrl(e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-slate-300 font-mono outline-none focus:border-blue-500"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-300">Platform Tag</label>
-                      <select
-                        value={editPlatform}
-                        onChange={(e) => setEditPlatform(e.target.value as 'O11' | 'ODC')}
-                        className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-white font-bold outline-none focus:border-blue-500"
-                      >
-                        <option value="O11">O11 Platform</option>
-                        <option value="ODC">ODC Platform</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Live Image Preview */}
-                  {editImageUrl && (
-                    <div className="p-4 bg-slate-900 border border-slate-700 rounded-2xl flex items-center gap-4">
-                      <img
-                        src={editImageUrl}
-                        alt="Live Cover Preview"
-                        className="w-24 h-16 object-cover rounded-xl border border-slate-700"
-                        onError={(e) => { (e.target as any).src = 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=600&auto=format&fit=crop&q=80'; }}
-                      />
-                      <div>
-                        <span className="text-xs font-bold text-slate-300">Live Cover Image Preview</span>
-                        <p className="text-[11px] text-slate-500 font-mono line-clamp-1">{editImageUrl}</p>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="flex justify-end gap-3 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setEditingCourse(null)}
-                      className="bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold px-5 py-2.5 rounded-xl text-xs"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-6 py-2.5 rounded-xl text-xs shadow-lg"
-                    >
-                      Save & Sync to Supabase
-                    </button>
-                  </div>
-                </form>
-              </div>
-            )}
           </div>
         )}
 
@@ -861,7 +785,7 @@ export default function AdminDashboard({
                   Question Bank & Multi-Format CSV Importer
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">
-                  Supports standard CSV dumps and Delivery/RBT/1.csv option-explanation format.
+                  Upload CSV clears old questions and populates new questions fresh.
                 </p>
               </div>
 
@@ -881,7 +805,7 @@ export default function AdminDashboard({
             {/* CSV Import Box */}
             <div className="bg-slate-800 border border-slate-700 p-5 rounded-2xl space-y-4">
               <h3 className="font-display font-bold text-xs text-white flex items-center gap-2">
-                <Upload className="w-4 h-4 text-blue-400" /> Batch Paste CSV Content
+                <Upload className="w-4 h-4 text-blue-400" /> Batch Paste CSV Content (Replaces Old Questions)
               </h3>
               <textarea
                 rows={3}
@@ -895,7 +819,7 @@ export default function AdminDashboard({
                 onClick={handleImportCsv}
                 className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs py-2.5 px-5 rounded-xl shadow-md cursor-pointer"
               >
-                Import CSV Questions
+                Import CSV Questions & Replace Old Data
               </button>
             </div>
 
@@ -918,16 +842,7 @@ export default function AdminDashboard({
                     />
                   </div>
                   <button
-                    onClick={() => {
-                      setEditingQuestion(null);
-                      setQText('');
-                      setChoiceA('');
-                      setChoiceB('');
-                      setChoiceC('');
-                      setChoiceD('');
-                      setExplanationText('');
-                      setImgUrl('');
-                    }}
+                    onClick={handleOpenAddQuestion}
                     className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1 cursor-pointer shrink-0"
                   >
                     <Plus className="w-4 h-4" /> Add Question
@@ -940,12 +855,20 @@ export default function AdminDashboard({
                   filteredQuestions.map((q, idx) => (
                     <div
                       key={q.id}
-                      className="bg-slate-900 border border-slate-700/80 p-4 rounded-xl text-xs flex justify-between items-start gap-4 hover:border-slate-600 transition-all"
+                      className="bg-slate-900 border border-slate-700/80 p-4 rounded-xl text-xs flex justify-between items-start gap-4 hover:border-slate-600 transition-all cursor-pointer"
+                      onClick={() => handleOpenEditQuestion(q)}
                     >
-                      <div className="space-y-2">
+                      <div className="space-y-2 flex-1">
                         <p className="font-bold text-slate-100 leading-relaxed">
                           {idx + 1}. {q.question}
                         </p>
+
+                        {q.imageUrl && (
+                          <div className="p-2 bg-slate-950 border border-slate-800 rounded-lg inline-block">
+                            <img src={q.imageUrl} alt="Diagram" className="max-h-24 object-contain rounded" />
+                          </div>
+                        )}
+
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-400">
                           {q.choices.map((c) => (
                             <div
@@ -962,9 +885,9 @@ export default function AdminDashboard({
                         </div>
                       </div>
 
-                      <div className="flex gap-2 shrink-0">
+                      <div className="flex gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
                         <button
-                          onClick={() => handleOpenEditModal(q)}
+                          onClick={() => handleOpenEditQuestion(q)}
                           className="text-blue-400 hover:text-blue-200 p-1.5 hover:bg-slate-800 rounded-lg"
                         >
                           <Edit2 className="w-4 h-4" />
@@ -1089,6 +1012,293 @@ export default function AdminDashboard({
         )}
 
       </main>
+
+      {/* ========================================================================= */}
+      {/* POPUP MODAL 1: COURSE EDIT MODAL OVERLAY (Point 3 & 5)                    */}
+      {/* ========================================================================= */}
+      {editingCourse && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-slate-800 border border-slate-700 rounded-3xl w-full max-w-2xl shadow-2xl p-6 space-y-5 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-700 pb-4">
+              <h3 className="font-display font-bold text-base text-white flex items-center gap-2">
+                <Edit2 className="w-5 h-5 text-blue-400" />
+                Edit Course: <span className="text-blue-300">{editingCourse.title}</span>
+              </h3>
+              <button
+                onClick={() => setEditingCourse(null)}
+                className="text-slate-400 hover:text-white p-1 hover:bg-slate-700 rounded-full"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {courseSaveMsg && (
+              <div className="bg-emerald-900/40 text-emerald-300 text-xs p-3 rounded-xl border border-emerald-500/50 font-bold flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" /> {courseSaveMsg}
+              </div>
+            )}
+
+            <form onSubmit={handleSaveCourseEdits} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="md:col-span-2 space-y-1">
+                  <label className="text-xs font-bold text-slate-300">Course Title</label>
+                  <input
+                    type="text"
+                    required
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none focus:border-blue-500 font-medium"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-300">Price ($ USD)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={editPrice}
+                    onChange={(e) => setEditPrice(parseFloat(e.target.value))}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-emerald-400 font-mono font-extrabold outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-300">Course Description</label>
+                <textarea
+                  rows={3}
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-200 outline-none focus:border-blue-500 leading-relaxed"
+                />
+              </div>
+
+              {/* Point 3: Upload Local Image Binary Base64 */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                <div className="md:col-span-2 space-y-1">
+                  <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
+                    <span>Cover Image (URL or Local File Upload)</span>
+                    <span className="text-[10px] text-blue-400 font-normal">Stored as Binary Base64</span>
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={editImageUrl}
+                      onChange={(e) => setEditImageUrl(e.target.value)}
+                      placeholder="https://... or upload file"
+                      className="flex-1 bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-300 font-mono outline-none focus:border-blue-500"
+                    />
+                    <label className="bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs px-3 py-2.5 rounded-xl border border-slate-600 flex items-center gap-1 cursor-pointer shrink-0">
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Upload Local</span>
+                      <input type="file" accept="image/*" className="hidden" onChange={handleCourseImageFileUpload} />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-300">Platform Tag</label>
+                  <select
+                    value={editPlatform}
+                    onChange={(e) => setEditPlatform(e.target.value as 'O11' | 'ODC')}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white font-bold outline-none focus:border-blue-500"
+                  >
+                    <option value="O11">O11 Platform</option>
+                    <option value="ODC">ODC Platform</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Live Image Preview */}
+              {editImageUrl && (
+                <div className="p-3 bg-slate-900 border border-slate-700 rounded-2xl flex items-center gap-3">
+                  <img
+                    src={editImageUrl}
+                    alt="Live Cover Preview"
+                    className="w-20 h-14 object-cover rounded-xl border border-slate-700"
+                    onError={(e) => { (e.target as any).src = 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=600&auto=format&fit=crop&q=80'; }}
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-slate-300">Live Cover Image Preview</span>
+                    <p className="text-[10px] text-slate-500 font-mono line-clamp-1">{editImageUrl.substring(0, 60)}...</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingCourse(null)}
+                  className="bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold px-4 py-2 rounded-xl text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-5 py-2 rounded-xl text-xs shadow-lg"
+                >
+                  Save & Sync to Supabase
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* POPUP MODAL 2: QUESTION EDIT POPUP MODAL OVERLAY (Point 6)               */}
+      {/* ========================================================================= */}
+      {isQuestionModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-slate-800 border border-slate-700 rounded-3xl w-full max-w-3xl shadow-2xl p-6 space-y-5 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-700 pb-4">
+              <h3 className="font-display font-bold text-base text-white flex items-center gap-2">
+                <Edit2 className="w-5 h-5 text-blue-400" />
+                {editingQuestion ? 'Edit Question Details' : 'Add New Question'}
+              </h3>
+              <button
+                onClick={() => setIsQuestionModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 hover:bg-slate-700 rounded-full"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveQuestion} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-300">Question Text (Đề Bài)</label>
+                <textarea
+                  rows={3}
+                  required
+                  value={qText}
+                  onChange={(e) => setQText(e.target.value)}
+                  placeholder="Enter exam question text..."
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-white outline-none focus:border-blue-500 font-medium leading-relaxed"
+                />
+              </div>
+
+              {/* Point 6: Upload Question Illustration Diagram Image */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
+                  <span>Question Diagram / Illustration Image (Ảnh Minh Họa Đề Bài)</span>
+                  <span className="text-[10px] text-blue-400">Local Upload or URL</span>
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={imgUrl}
+                    onChange={(e) => setImgUrl(e.target.value)}
+                    placeholder="https://... or upload local image file"
+                    className="flex-1 bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-300 font-mono outline-none focus:border-blue-500"
+                  />
+                  <label className="bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs px-3 py-2.5 rounded-xl border border-slate-600 flex items-center gap-1 cursor-pointer shrink-0">
+                    <ImageIcon className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Upload Local Image</span>
+                    <input type="file" accept="image/*" className="hidden" onChange={handleQuestionImageFileUpload} />
+                  </label>
+                </div>
+              </div>
+
+              {imgUrl && (
+                <div className="p-3 bg-slate-900 border border-slate-700 rounded-xl flex items-center gap-3">
+                  <img src={imgUrl} alt="Question Illustration" className="h-16 object-contain rounded border border-slate-700" />
+                  <span className="text-xs text-slate-400 font-medium">Question Diagram Preview</span>
+                </div>
+              )}
+
+              {/* Choices A, B, C, D */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-300">Choice A</label>
+                  <input
+                    type="text"
+                    required
+                    value={choiceA}
+                    onChange={(e) => setChoiceA(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-300">Choice B</label>
+                  <input
+                    type="text"
+                    required
+                    value={choiceB}
+                    onChange={(e) => setChoiceB(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-300">Choice C</label>
+                  <input
+                    type="text"
+                    value={choiceC}
+                    onChange={(e) => setChoiceC(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-300">Choice D</label>
+                  <input
+                    type="text"
+                    value={choiceD}
+                    onChange={(e) => setChoiceD(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-300">Correct Answer</label>
+                  <select
+                    value={correctAns}
+                    onChange={(e) => setCorrectAns(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-emerald-400 font-bold outline-none focus:border-blue-500"
+                  >
+                    <option value="A">Option A</option>
+                    <option value="B">Option B</option>
+                    <option value="C">Option C</option>
+                    <option value="D">Option D</option>
+                  </select>
+                </div>
+
+                <div className="md:col-span-2 space-y-1">
+                  <label className="text-xs font-bold text-slate-300">Explanation (Giải thích đáp án)</label>
+                  <input
+                    type="text"
+                    value={explanationText}
+                    onChange={(e) => setExplanationText(e.target.value)}
+                    placeholder="Enter answer explanation..."
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-200 outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsQuestionModalOpen(false)}
+                  className="bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold px-4 py-2 rounded-xl text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-5 py-2 rounded-xl text-xs shadow-lg"
+                >
+                  Save Question Details
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

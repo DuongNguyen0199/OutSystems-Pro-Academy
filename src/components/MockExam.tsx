@@ -27,7 +27,17 @@ export default function MockExam({
   const [loadingAi, setLoadingAi] = useState<Record<string, boolean>>({});
   const [showExplanationPanel, setShowExplanationPanel] = useState<Record<string, boolean>>({});
 
-  const currentQuestion = questions[currentIdx];
+  if (!questions || questions.length === 0) {
+    return (
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 text-center space-y-3">
+        <p className="text-xs font-bold text-slate-600">
+          No preview questions available for this course yet.
+        </p>
+      </div>
+    );
+  }
+
+  const currentQuestion = questions[currentIdx] || questions[0];
   const hasAnsweredCurrent = currentQuestion ? !!submittedAnswers[currentQuestion.id] : false;
   const selectedForCurrent = currentQuestion ? selectedAnswers[currentQuestion.id] : undefined;
 

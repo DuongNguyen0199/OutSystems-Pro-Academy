@@ -20,8 +20,9 @@ export default function CourseCard({
 }: CourseCardProps) {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
-  // Limit preview to ONLY 10 questions for unauthenticated Quick Demo Quiz
-  const previewQuestions = course.mockExam.slice(0, 10);
+  // Safe fallback to prevent blank/white screen if mockExam is undefined
+  const safeMockExam = course.mockExam || [];
+  const previewQuestions = safeMockExam.slice(0, 10);
 
   const getTagStyle = (color: string) => {
     switch (color) {
@@ -50,6 +51,7 @@ export default function CourseCard({
             alt={course.title}
             className="w-full h-full object-cover"
             referrerPolicy="no-referrer"
+            onError={(e) => { (e.target as any).src = 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=600&auto=format&fit=crop&q=80'; }}
           />
           <div className="absolute top-2 right-2 bg-slate-900/90 backdrop-blur-xs text-white text-xs font-mono font-bold px-2.5 py-1 rounded-md md:hidden">
             ${course.price}
@@ -90,7 +92,7 @@ export default function CourseCard({
       {/* Buttons Deck */}
       <div className="px-5 md:px-6 pb-5 md:pb-6 grid grid-cols-1 sm:grid-cols-3 gap-3 border-b border-slate-100">
         
-        {/* Free 10-Question Demo Quiz Toggle */}
+        {/* Question Preview Toggle */}
         <button
           onClick={() => setIsPreviewOpen(!isPreviewOpen)}
           className={`flex items-center justify-center gap-2 font-semibold text-xs md:text-sm py-2.5 px-4 rounded-xl border transition-all cursor-pointer ${
@@ -101,21 +103,21 @@ export default function CourseCard({
         >
           {isPreviewOpen ? (
             <>
-              <EyeOff className="w-4 h-4 text-slate-500" /> Hide Quick Demo Quiz
+              <EyeOff className="w-4 h-4 text-slate-500" /> Hide Question Preview
             </>
           ) : (
             <>
-              <Eye className="w-4 h-4 text-blue-600" /> Free Preview (10 Questions Demo)
+              <Eye className="w-4 h-4 text-blue-600" /> Question Preview
             </>
           )}
         </button>
 
-        {/* Enter Code / Start Full Test Trigger */}
+        {/* Practice Test Trigger */}
         <button
           onClick={() => onSelectActivationCode(course)}
           className="flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs md:text-sm py-2.5 px-4 rounded-xl transition-all cursor-pointer shadow-sm"
         >
-          <Key className="w-4 h-4 text-amber-300" /> Enter Activation Code
+          <Key className="w-4 h-4 text-amber-300" /> Practice Test
         </button>
 
         {/* Payment QR / Request Access */}
@@ -141,10 +143,10 @@ export default function CourseCard({
               <div className="flex items-center justify-between bg-blue-50 border border-blue-200 p-3 rounded-xl text-xs font-semibold text-blue-900">
                 <span className="flex items-center gap-1.5">
                   <Sparkles className="w-4 h-4 text-blue-600" />
-                  Free 10-Question Demo Quiz Mode (Unauthenticated Preview)
+                  Question Preview Mode (Free 10-Question Demo)
                 </span>
                 <span className="text-[11px] font-bold bg-blue-200 text-blue-900 px-2 py-0.5 rounded-md">
-                  10 / {course.mockExam.length} Questions
+                  {previewQuestions.length} / {safeMockExam.length} Questions
                 </span>
               </div>
 
@@ -152,7 +154,7 @@ export default function CourseCard({
               <MockExam 
                 courseTitle={course.title}
                 questions={previewQuestions}
-                totalAvailableQuestions={course.mockExam.length}
+                totalAvailableQuestions={safeMockExam.length}
                 onOpenActivation={() => onSelectActivationCode(course)}
                 onOpenPayment={() => onSelectPayment(course)}
               />
