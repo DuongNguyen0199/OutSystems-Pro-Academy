@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Mail, Lock, Shield, CheckCircle } from 'lucide-react';
+import { X, Mail, Lock, Shield, Info } from 'lucide-react';
 import { UserProfile } from '../types';
 
 interface AuthModalProps {
@@ -8,10 +8,8 @@ interface AuthModalProps {
 }
 
 export default function AuthModal({ onClose, onSuccess }: AuthModalProps) {
-  const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'student' | 'admin'>('student');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -25,7 +23,7 @@ export default function AuthModal({ onClose, onSuccess }: AuthModalProps) {
     }
 
     if (!password || password.length < 4) {
-      setError('Password must be at least 4 characters long.');
+      setError('Please enter your account password.');
       return;
     }
 
@@ -38,7 +36,6 @@ export default function AuthModal({ onClose, onSuccess }: AuthModalProps) {
         body: JSON.stringify({
           email: email.trim().toLowerCase(),
           password: password,
-          role: role,
         }),
       });
 
@@ -56,7 +53,7 @@ export default function AuthModal({ onClose, onSuccess }: AuthModalProps) {
       onClose();
     } catch (err) {
       // Local fallback for offline/client mode
-      const assignedRole = email.trim().toLowerCase() === 'duongrbt@gmail.com' ? 'admin' : role;
+      const assignedRole = email.trim().toLowerCase() === 'duongrbt@gmail.com' ? 'admin' : 'student';
       const userProfile: UserProfile = {
         id: 'usr_' + Date.now(),
         email: email.trim().toLowerCase(),
@@ -82,10 +79,10 @@ export default function AuthModal({ onClose, onSuccess }: AuthModalProps) {
           <div className="relative z-10">
             <h3 className="font-display font-bold text-lg flex items-center gap-2">
               <Shield className="w-5 h-5 text-blue-400" />
-              {isRegister ? 'Create Student Account' : 'Login to Academy'}
+              Sign In to OutSystems Academy
             </h3>
             <p className="text-xs text-slate-400 mt-1">
-              Access your OutSystems practice tests and activation codes
+              Access student portal & Admin Management Panel
             </p>
           </div>
           <button 
@@ -96,89 +93,63 @@ export default function AuthModal({ onClose, onSuccess }: AuthModalProps) {
           </button>
         </div>
 
+        {/* Notice Info Box: No Self Registration */}
+        <div className="bg-blue-50/70 border-b border-blue-100 p-3.5 px-6 flex items-start gap-2.5 text-xs text-blue-900">
+          <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+          <p className="leading-relaxed font-medium">
+            Student accounts & activation codes are issued by Admin upon purchasing a course. Log in below with your assigned credentials.
+          </p>
+        </div>
+
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 text-xs p-3 rounded-xl">
+            <div className="bg-red-50 text-red-700 text-xs p-3 rounded-xl border border-red-200 font-semibold">
               {error}
             </div>
           )}
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-700">Email Address</label>
+            <label className="text-xs font-bold text-slate-700 block">
+              Email Address
+            </label>
             <div className="relative">
-              <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
               <input
                 type="email"
-                placeholder="your.email@example.com"
+                required
+                placeholder="your.email@gmail.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-xl py-2.5 pl-10 pr-4 text-xs text-slate-900 placeholder-slate-400 outline-none transition-all"
-                required
+                className="w-full bg-white border border-slate-200 rounded-xl p-3 pl-10 text-xs md:text-sm text-slate-900 outline-none focus:border-blue-600 font-medium"
               />
+              <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-700">Password</label>
+            <label className="text-xs font-bold text-slate-700 block">
+              Password
+            </label>
             <div className="relative">
-              <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
               <input
                 type="password"
+                required
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-xl py-2.5 pl-10 pr-4 text-xs text-slate-900 placeholder-slate-400 outline-none transition-all"
-                required
+                className="w-full bg-white border border-slate-200 rounded-xl p-3 pl-10 text-xs md:text-sm text-slate-900 outline-none focus:border-blue-600 font-medium"
               />
+              <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
             </div>
           </div>
 
-          {isRegister && (
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-700">Account Type</label>
-              <select
-                value={role}
-                onChange={(e) => setRole(e.target.value as 'student' | 'admin')}
-                className="w-full bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-xl py-2.5 px-3 text-xs text-slate-900 outline-none transition-all"
-              >
-                <option value="student">Student (Learner)</option>
-                <option value="admin">Administrator (duongrbt@gmail.com)</option>
-              </select>
-            </div>
-          )}
-
-          <div className="pt-2">
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold py-2.5 rounded-xl text-xs transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-            >
-              {loading ? (
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <>
-                  <CheckCircle className="w-4 h-4" />
-                  <span>{isRegister ? 'Create Account' : 'Sign In Now'}</span>
-                </>
-              )}
-            </button>
-          </div>
-
-          <div className="text-center pt-2 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={() => {
-                setIsRegister(!isRegister);
-                setError('');
-              }}
-              className="text-xs font-semibold text-blue-600 hover:underline cursor-pointer"
-            >
-              {isRegister
-                ? 'Already have an account? Sign In'
-                : 'Need an account? Register here'}
-            </button>
-          </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-xs md:text-sm shadow-sm transition-all cursor-pointer mt-2"
+          >
+            {loading ? 'Authenticating...' : 'Sign In'}
+          </button>
         </form>
       </div>
     </div>

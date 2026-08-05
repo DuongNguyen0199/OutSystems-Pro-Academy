@@ -71,23 +71,22 @@ export default function Header({
             </button>
           )}
 
-          {/* User Auth / Admin buttons */}
+          {/* Dedicated Admin Portal Button */}
+          <button
+            onClick={onOpenAdmin}
+            className="bg-slate-900 hover:bg-slate-800 text-amber-400 font-bold text-[11px] px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer border border-slate-800"
+          >
+            <Shield className="w-3.5 h-3.5 text-amber-400" />
+            <span>Admin Panel</span>
+          </button>
+
+          {/* User Auth status */}
           {user ? (
             <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-full border border-slate-200">
               <span className="text-xs font-bold text-slate-800 px-2.5 truncate max-w-[120px] sm:max-w-xs flex items-center gap-1">
                 <User className="w-3.5 h-3.5 text-blue-600" />
                 {user.email}
               </span>
-
-              {user.role === 'admin' && (
-                <button
-                  onClick={onOpenAdmin}
-                  className="bg-slate-900 hover:bg-slate-800 text-amber-400 font-bold text-[11px] px-2.5 py-1 rounded-full flex items-center gap-1 transition-colors cursor-pointer"
-                >
-                  <Shield className="w-3 h-3 text-amber-400" />
-                  <span>Admin</span>
-                </button>
-              )}
 
               <button
                 onClick={onLogout}
@@ -103,7 +102,7 @@ export default function Header({
               className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold px-3.5 py-1.5 rounded-full shadow-xs transition-all cursor-pointer"
             >
               <User className="w-3.5 h-3.5" />
-              <span>Sign In / Register</span>
+              <span>Sign In</span>
             </button>
           )}
         </div>
