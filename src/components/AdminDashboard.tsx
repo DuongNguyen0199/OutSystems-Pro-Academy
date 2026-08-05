@@ -210,6 +210,7 @@ export default function AdminDashboard({
     } catch (err) {
       alert('Could not reset code.');
     }
+  };
   // Delete User Handler (Item 1)
   const handleDeleteUser = async (userId: string, email: string) => {
     if (!confirm(`Are you sure you want to PERMANENTLY DELETE user "${email}"?`)) return;
