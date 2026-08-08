@@ -4,10 +4,11 @@ import { Course, UserProfile } from '../types';
 
 interface ActivationCodeModalProps {
   course: Course;
-  user: UserProfile | null;
+  user?: UserProfile | null;
   onClose: () => void;
-  onSuccess: (course: Course) => void;
-  onRequestPayment: () => void;
+  onSuccess?: (course: Course) => void;
+  onSuccessUnlock?: (course: Course) => void;
+  onRequestPayment?: () => void;
 }
 
 export default function ActivationCodeModal({
@@ -15,6 +16,7 @@ export default function ActivationCodeModal({
   user,
   onClose,
   onSuccess,
+  onSuccessUnlock,
   onRequestPayment,
 }: ActivationCodeModalProps) {
   const [code, setCode] = useState('');
@@ -22,6 +24,12 @@ export default function ActivationCodeModal({
   const [error, setError] = useState('');
   const [attempts, setAttempts] = useState(0);
   const [isLocked, setIsLocked] = useState(false);
+
+  const triggerSuccess = () => {
+    if (onSuccessUnlock) onSuccessUnlock(course);
+    if (onSuccess) onSuccess(course);
+    onClose();
+  };
 
   const handleValidate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,8 +60,7 @@ export default function ActivationCodeModal({
       if (response.ok) {
         const data = await response.json();
         if (data.valid || data.success) {
-          onSuccess(course);
-          onClose();
+          triggerSuccess();
           return;
         } else if (data.error && data.error.includes('revoked')) {
           setError(data.error);
@@ -69,8 +76,7 @@ export default function ActivationCodeModal({
 
     // Bulletproof Fallback: If code starts with OUT- or contains -90D- or is valid format, unlock test!
     if (trimmedCode.startsWith('OUT-') || trimmedCode.includes('-90D-') || trimmedCode.length >= 10) {
-      onSuccess(course);
-      onClose();
+      triggerSuccess();
       return;
     }
 
