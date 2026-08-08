@@ -82,11 +82,11 @@ export default function AuthModal({ onClose, onSuccess }: AuthModalProps) {
           </button>
         </div>
 
-        {/* Notice Info Box: Password Required */}
+        {/* Notice Info Box: Admin Account Provisioning */}
         <div className="bg-blue-50/70 border-b border-blue-100 p-3.5 px-6 flex items-start gap-2.5 text-xs text-blue-900">
           <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
           <p className="leading-relaxed font-medium">
-            Strict Password Verification Enabled. Enter your assigned account email and password to log in.
+            Accounts are provisioned by Administrator. Please log in with your assigned email and password.
           </p>
         </div>
 

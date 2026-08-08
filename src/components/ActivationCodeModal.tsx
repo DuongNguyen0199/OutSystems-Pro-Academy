@@ -124,7 +124,7 @@ export default function ActivationCodeModal({
                 <span>Account Login Required</span>
               </div>
               <p className="text-slate-700 leading-relaxed">
-                You must be logged in to activate a course code so it can be bound to your account.
+                You must be logged in to activate a course code. Accounts are issued by Administrator.
               </p>
               {onOpenAuthModal && (
                 <button
@@ -135,7 +135,7 @@ export default function ActivationCodeModal({
                   }}
                   className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 rounded-lg text-xs transition-colors shadow cursor-pointer mt-1"
                 >
-                  Log In / Register Account Now
+                  Log In to Your Account
                 </button>
               )}
             </div>
