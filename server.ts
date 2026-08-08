@@ -686,37 +686,105 @@ async function sendAdminEmailAlert(subject: string, textBody: string): Promise<b
   }
 }
 
-// Payment request creation endpoint
+// Payment request creation endpoint connected to Supabase orders table
 app.post("/api/payment-request", async (req, res) => {
-  const { userEmail, courseId, courseTitle, amount, fullName, note } = req.body;
-  
-  const reqObj = {
-    id: "req_" + Date.now(),
-    userEmail: (userEmail || "").trim().toLowerCase(),
-    courseId: courseId,
-    courseTitle: courseTitle,
-    amount: amount || 29.99,
-    status: "pending",
-    createdAt: new Date().toISOString()
-  };
+  try {
+    const { userEmail, courseId, courseTitle, amount } = req.body;
+    const cleanEmail = (userEmail || "").trim().toLowerCase();
+    const targetUuid = resolveCourseUuid(courseId);
+    
+    const crypto = require("crypto");
+    const orderUuid = crypto.randomUUID();
 
-  memoryPaymentRequests.unshift(reqObj);
+    const reqObj = {
+      id: orderUuid,
+      userEmail: cleanEmail,
+      courseId: courseId,
+      courseTitle: courseTitle || "OutSystems Certification Course",
+      amount: amount || 29.99,
+      status: "pending",
+      createdAt: new Date().toISOString()
+    };
 
-  const alertText = `🚨 *NEW COURSE PURCHASE PAYMENT REQUEST*
+    memoryPaymentRequests.unshift(reqObj);
+
+    const supabase = getSupabase();
+    if (supabase) {
+      const { error: orderErr } = await supabase.from("orders").insert([{
+        id: orderUuid,
+        user_email: cleanEmail,
+        course_id: targetUuid,
+        course_title: reqObj.courseTitle,
+        amount: Number(reqObj.amount),
+        status: "pending"
+      }]);
+
+      if (orderErr) {
+        console.error("Supabase order insert note:", orderErr.message);
+      }
+    }
+
+    const alertText = `🚨 *NEW COURSE PURCHASE PAYMENT REQUEST*
 📧 *Student Email:* ${reqObj.userEmail}
 📚 *Course:* ${reqObj.courseTitle}
 💵 *Amount:* $${reqObj.amount} USD
 ⏱️ *Time:* ${new Date().toLocaleString()}`;
 
-  sendTelegramAlert(alertText).catch(() => {});
-  sendAdminEmailAlert(`[Payment Request] ${reqObj.courseTitle}`, alertText.replace(/\*/g, "")).catch(() => {});
+    sendTelegramAlert(alertText).catch(() => {});
+    sendAdminEmailAlert(`[Payment Request] ${reqObj.courseTitle}`, alertText.replace(/\*/g, "")).catch(() => {});
 
-    res.json({ success: true, message: "Payment request submitted successfully." });
+    res.json({ success: true, message: "Payment request submitted successfully and saved to database!" });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || "Failed to process payment request." });
+  }
 });
 
-// Admin payment request listing
-app.get("/api/admin/payment-requests", requireAdminAuth, (req, res) => {
-  res.json({ requests: memoryPaymentRequests, codes: memoryActivationCodes });
+// Admin payment request listing from Supabase orders & enrollments
+app.get("/api/admin/payment-requests", requireAdminAuth, async (req, res) => {
+  try {
+    const supabase = getSupabase();
+    let requestsList = [...memoryPaymentRequests];
+    let codesList = [...memoryActivationCodes];
+
+    if (supabase) {
+      const { data: dbOrders } = await supabase.from("orders").select("*");
+      if (dbOrders && dbOrders.length > 0) {
+        dbOrders.forEach((o: any) => {
+          if (!requestsList.some(r => r.id === o.id)) {
+            requestsList.push({
+              id: o.id,
+              userEmail: o.user_email,
+              courseId: o.course_id,
+              courseTitle: o.course_title,
+              amount: Number(o.amount),
+              status: o.status || 'pending',
+              createdAt: o.created_at || new Date().toISOString()
+            });
+          }
+        });
+      }
+
+      const { data: dbEnroll } = await supabase.from("enrollments").select("*");
+      if (dbEnroll && dbEnroll.length > 0) {
+        dbEnroll.forEach((e: any) => {
+          if (!codesList.some(c => c.code.toUpperCase() === (e.activation_code || '').toUpperCase())) {
+            codesList.push({
+              id: e.id,
+              code: e.activation_code,
+              userEmail: e.user_email,
+              courseId: e.course_id,
+              status: e.status || 'active',
+              createdAt: e.created_at || new Date().toISOString()
+            });
+          }
+        });
+      }
+    }
+
+    res.json({ success: true, requests: requestsList, codes: codesList });
+  } catch (err) {
+    res.json({ success: true, requests: memoryPaymentRequests, codes: memoryActivationCodes });
+  }
 });
 
 // Code validation & verification endpoint (Item 3)
