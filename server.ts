@@ -523,6 +523,69 @@ app.post("/api/admin/users/reset-code", requireAdminAuth, async (req, res) => {
   }
 });
 
+// Update Activation Code Details (CRUD - Update)
+app.post("/api/admin/codes/update", requireAdminAuth, async (req, res) => {
+  try {
+    const { id, oldCode, code, userEmail, courseId, status } = req.body;
+    const cleanCode = (code || "").trim().toUpperCase();
+    const cleanEmail = (userEmail || "").trim().toLowerCase();
+
+    // Update memory
+    const targetCode = memoryActivationCodes.find(c => c.id === id || c.code.toUpperCase() === (oldCode || '').toUpperCase());
+    if (targetCode) {
+      targetCode.code = cleanCode;
+      targetCode.userEmail = cleanEmail;
+      targetCode.courseId = courseId;
+      targetCode.status = status;
+    }
+
+    const supabase = getSupabase();
+    if (supabase) {
+      const targetUuid = resolveCourseUuid(courseId);
+      if (id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+        await supabase.from("enrollments").update({
+          activation_code: cleanCode,
+          user_email: cleanEmail,
+          course_id: targetUuid,
+          status: status
+        }).eq("id", id);
+      } else if (oldCode) {
+        await supabase.from("enrollments").update({
+          activation_code: cleanCode,
+          user_email: cleanEmail,
+          course_id: targetUuid,
+          status: status
+        }).eq("activation_code", oldCode.trim().toUpperCase());
+      }
+    }
+
+    res.json({ success: true, message: `Updated activation code "${cleanCode}" successfully!` });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || "Failed to update code." });
+  }
+});
+
+// Delete Activation Code (CRUD - Delete)
+app.post("/api/admin/codes/delete", requireAdminAuth, async (req, res) => {
+  try {
+    const { id, code } = req.body;
+    memoryActivationCodes = memoryActivationCodes.filter(c => c.id !== id && c.code.toUpperCase() !== (code || '').toUpperCase());
+
+    const supabase = getSupabase();
+    if (supabase) {
+      if (id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+        await supabase.from("enrollments").delete().eq("id", id);
+      } else if (code) {
+        await supabase.from("enrollments").delete().eq("activation_code", code.trim().toUpperCase());
+      }
+    }
+
+    res.json({ success: true, message: `Permanently deleted activation code "${code || id}"!` });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || "Failed to delete code." });
+  }
+});
+
 // Course Management Endpoint (Role: Admin ONLY)
 app.post("/api/admin/courses/upsert", requireAdminAuth, async (req, res) => {
   try {

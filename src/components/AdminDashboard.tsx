@@ -104,6 +104,15 @@ export default function AdminDashboard({
   const [testingTelegram, setTestingTelegram] = useState(false);
   const [testingEmail, setTestingEmail] = useState(false);
 
+  // Code Edit Modal State (CRUD - Update & Delete)
+  const [isEditCodeModalOpen, setIsEditCodeModalOpen] = useState(false);
+  const [editingCodeObj, setEditingCodeObj] = useState<ActivationCode | null>(null);
+  const [editCodeStr, setEditCodeStr] = useState('');
+  const [editCodeEmail, setEditCodeEmail] = useState('');
+  const [editCodeCourseId, setEditCodeCourseId] = useState('');
+  const [editCodeStatus, setEditCodeStatus] = useState<'active' | 'revoked'>('active');
+  const [codeSearchQuery, setCodeSearchQuery] = useState('');
+
   const getAdminHeaders = () => {
     const savedUser = localStorage.getItem('outsystems_user');
     let email = 'duongrbt@gmail.com';
@@ -402,6 +411,67 @@ export default function AdminDashboard({
       headers: getAdminHeaders(),
       body: JSON.stringify(newCodeObj)
     }).catch(() => {});
+  };
+
+  // Delete Activation Code Handler (CRUD - Delete)
+  const handleDeleteCode = async (codeId: string, codeStr: string) => {
+    if (!confirm(`Are you sure you want to PERMANENTLY DELETE activation code "${codeStr}"?`)) return;
+    try {
+      const res = await fetch('/api/admin/codes/delete', {
+        method: 'POST',
+        headers: getAdminHeaders(),
+        body: JSON.stringify({ id: codeId, code: codeStr })
+      });
+      const data = await res.json();
+      alert(data.message || 'Code deleted successfully.');
+      setActivationCodes(prev => prev.filter(c => c.id !== codeId && c.code !== codeStr));
+    } catch (err) {
+      alert('Could not delete code.');
+    }
+  };
+
+  // Open Edit Activation Code Modal (CRUD - Update)
+  const handleOpenEditCodeModal = (codeItem: ActivationCode) => {
+    setEditingCodeObj(codeItem);
+    setEditCodeStr(codeItem.code);
+    setEditCodeEmail(codeItem.userEmail);
+    setEditCodeCourseId(codeItem.courseId);
+    setEditCodeStatus((codeItem.status as any) || 'active');
+    setIsEditCodeModalOpen(true);
+  };
+
+  // Save Edited Activation Code (CRUD - Update)
+  const handleSaveEditedCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCodeObj || !editCodeStr.trim() || !editCodeEmail.trim()) return;
+
+    try {
+      const res = await fetch('/api/admin/codes/update', {
+        method: 'POST',
+        headers: getAdminHeaders(),
+        body: JSON.stringify({
+          id: editingCodeObj.id,
+          oldCode: editingCodeObj.code,
+          code: editCodeStr.trim().toUpperCase(),
+          userEmail: editCodeEmail.trim().toLowerCase(),
+          courseId: editCodeCourseId,
+          status: editCodeStatus
+        })
+      });
+      const data = await res.json();
+      alert(data.message || 'Code updated successfully!');
+      setIsEditCodeModalOpen(false);
+
+      setActivationCodes(prev => prev.map(c => (c.id === editingCodeObj.id || c.code === editingCodeObj.code) ? {
+        ...c,
+        code: editCodeStr.trim().toUpperCase(),
+        userEmail: editCodeEmail.trim().toLowerCase(),
+        courseId: editCodeCourseId,
+        status: editCodeStatus as any
+      } : c));
+    } catch (err) {
+      alert('Could not update code.');
+    }
   };
 
   // Open Question Edit Modal
@@ -1116,21 +1186,44 @@ export default function AdminDashboard({
               {/* Right Side Column: Issued Codes Table & Payment Requests Table */}
               <div className="lg:col-span-2 space-y-6">
 
-                {/* 1. Issued Activation Codes Table */}
+                {/* 1. Issued Activation Codes Table (CRUD - Read, Search, Update, Delete) */}
                 <div className="bg-slate-800 border border-slate-700 rounded-2xl p-5 space-y-4 shadow-lg">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <h3 className="font-display font-bold text-sm text-white flex items-center gap-2">
                       <Key className="w-4 h-4 text-amber-400" />
                       Generated & Active Codes ({activationCodes.length})
                     </h3>
-                    <span className="text-[10px] font-mono text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full">
-                      SUPABASE SYNCED
-                    </span>
+
+                    {/* Search Bar */}
+                    <div className="relative flex-1 max-w-xs">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        placeholder="Search by code, email, course..."
+                        value={codeSearchQuery}
+                        onChange={(e) => setCodeSearchQuery(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white outline-none focus:border-blue-500 font-medium"
+                      />
+                    </div>
                   </div>
 
                   <div className="space-y-3 max-h-[40vh] overflow-y-auto pr-1">
-                    {activationCodes.length > 0 ? (
-                      activationCodes.map((c) => {
+                    {activationCodes.filter(c => {
+                      if (!codeSearchQuery.trim()) return true;
+                      const q = codeSearchQuery.trim().toLowerCase();
+                      const courseObj = courses.find(cr => cr.id === c.courseId);
+                      return c.userEmail.toLowerCase().includes(q) || 
+                             c.code.toLowerCase().includes(q) || 
+                             (courseObj && courseObj.title.toLowerCase().includes(q));
+                    }).length > 0 ? (
+                      activationCodes.filter(c => {
+                        if (!codeSearchQuery.trim()) return true;
+                        const q = codeSearchQuery.trim().toLowerCase();
+                        const courseObj = courses.find(cr => cr.id === c.courseId);
+                        return c.userEmail.toLowerCase().includes(q) || 
+                               c.code.toLowerCase().includes(q) || 
+                               (courseObj && courseObj.title.toLowerCase().includes(q));
+                      }).map((c) => {
                         const courseObj = courses.find(cr => cr.id === c.courseId);
                         return (
                           <div
@@ -1167,18 +1260,38 @@ export default function AdminDashboard({
                               </div>
                             </div>
 
-                            <button
-                              onClick={() => handleResetUserCode(c.userEmail, c.courseId)}
-                              className="bg-red-950/70 hover:bg-red-900 text-red-300 border border-red-800 text-[11px] font-bold px-3 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer shrink-0"
-                            >
-                              <RotateCcw className="w-3.5 h-3.5 text-red-400" /> Revoke / Reset Code
-                            </button>
+                            {/* CRUD Actions: Edit, Revoke, Delete */}
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                onClick={() => handleOpenEditCodeModal(c)}
+                                className="bg-blue-950/80 hover:bg-blue-900 text-blue-300 border border-blue-800 text-[11px] font-bold px-2.5 py-1.5 rounded-xl flex items-center gap-1 cursor-pointer"
+                                title="Edit Code Details"
+                              >
+                                <Edit2 className="w-3.5 h-3.5 text-blue-400" /> Edit
+                              </button>
+
+                              <button
+                                onClick={() => handleResetUserCode(c.userEmail, c.courseId)}
+                                className="bg-amber-950/80 hover:bg-amber-900 text-amber-300 border border-amber-800 text-[11px] font-bold px-2.5 py-1.5 rounded-xl flex items-center gap-1 cursor-pointer"
+                                title="Revoke Access"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5 text-amber-400" /> Revoke
+                              </button>
+
+                              <button
+                                onClick={() => handleDeleteCode(c.id, c.code)}
+                                className="bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-800 text-[11px] font-bold px-2.5 py-1.5 rounded-xl flex items-center gap-1 cursor-pointer"
+                                title="Delete Code Record"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 text-red-400" /> Delete
+                              </button>
+                            </div>
                           </div>
                         );
                       })
                     ) : (
                       <p className="text-xs text-slate-500 italic text-center py-6">
-                        No activation codes generated yet. Use the left form to issue a code.
+                        No activation codes found matching your query.
                       </p>
                     )}
                   </div>
@@ -1823,6 +1936,93 @@ export default function AdminDashboard({
                   className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-5 py-2 rounded-xl text-xs shadow-lg"
                 >
                   Save Question Details
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT ACTIVATION CODE MODAL (CRUD - Update) */}
+      {isEditCodeModalOpen && editingCodeObj && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl p-6 space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-700 pb-3">
+              <h3 className="font-display font-bold text-base text-white flex items-center gap-2">
+                <Key className="w-5 h-5 text-amber-400" />
+                Edit Activation Code Details
+              </h3>
+              <button
+                onClick={() => setIsEditCodeModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 hover:bg-slate-700 rounded-full cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditedCode} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-300">Activation Code String</label>
+                <input
+                  type="text"
+                  required
+                  value={editCodeStr}
+                  onChange={(e) => setEditCodeStr(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm font-mono font-bold text-emerald-400 outline-none focus:border-blue-500 uppercase"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-300">Student Email</label>
+                <input
+                  type="email"
+                  required
+                  value={editCodeEmail}
+                  onChange={(e) => setEditCodeEmail(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none focus:border-blue-500 font-medium"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-300">Target Course</label>
+                <select
+                  value={editCodeCourseId}
+                  onChange={(e) => setEditCodeCourseId(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none focus:border-blue-500 font-medium"
+                >
+                  {sortedCourses.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-300">Activation Code Status</label>
+                <select
+                  value={editCodeStatus}
+                  onChange={(e) => setEditCodeStatus(e.target.value as any)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-emerald-400 font-bold outline-none focus:border-blue-500"
+                >
+                  <option value="active">ACTIVE (Allowed for Practice Test)</option>
+                  <option value="revoked">REVOKED (Blocked Access)</option>
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-700">
+                <button
+                  type="button"
+                  onClick={() => setIsEditCodeModalOpen(false)}
+                  className="bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold px-4 py-2 rounded-xl text-xs cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-5 py-2 rounded-xl text-xs shadow-lg flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Save className="w-4 h-4" /> Save Code Changes
                 </button>
               </div>
             </form>
