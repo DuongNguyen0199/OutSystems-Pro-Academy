@@ -1113,50 +1113,122 @@ export default function AdminDashboard({
                 </div>
               </div>
 
-              {/* Payment Requests Table */}
-              <div className="lg:col-span-2 bg-slate-800 border border-slate-700 rounded-2xl p-5 space-y-4">
-                <h3 className="font-display font-bold text-sm text-white flex items-center gap-2">
-                  <Mail className="w-4 h-4 text-blue-400" />
-                  Payment Requests ({paymentRequests.length})
-                </h3>
+              {/* Right Side Column: Issued Codes Table & Payment Requests Table */}
+              <div className="lg:col-span-2 space-y-6">
 
-                <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
-                  {paymentRequests.length > 0 ? (
-                    paymentRequests.map((req) => (
-                      <div
-                        key={req.id}
-                        className="bg-slate-900 border border-slate-700 p-4 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3"
-                      >
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-xs text-white">{req.userEmail}</span>
-                            <span className="text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded">
-                              {req.status}
-                            </span>
+                {/* 1. Issued Activation Codes Table */}
+                <div className="bg-slate-800 border border-slate-700 rounded-2xl p-5 space-y-4 shadow-lg">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-display font-bold text-sm text-white flex items-center gap-2">
+                      <Key className="w-4 h-4 text-amber-400" />
+                      Generated & Active Codes ({activationCodes.length})
+                    </h3>
+                    <span className="text-[10px] font-mono text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full">
+                      SUPABASE SYNCED
+                    </span>
+                  </div>
+
+                  <div className="space-y-3 max-h-[40vh] overflow-y-auto pr-1">
+                    {activationCodes.length > 0 ? (
+                      activationCodes.map((c) => {
+                        const courseObj = courses.find(cr => cr.id === c.courseId);
+                        return (
+                          <div
+                            key={c.id}
+                            className="bg-slate-900 border border-slate-700 p-3.5 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3"
+                          >
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-xs text-white">{c.userEmail}</span>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                                  c.status === 'revoked'
+                                    ? 'bg-red-500/20 text-red-300 border border-red-500/30'
+                                    : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                }`}>
+                                  {(c.status || 'active').toUpperCase()}
+                                </span>
+                              </div>
+                              <p className="text-xs text-blue-300 font-medium">
+                                {courseObj?.title || c.courseId}
+                              </p>
+                              <div className="flex items-center gap-2">
+                                <p className="font-mono text-xs font-extrabold text-emerald-400 bg-slate-950 px-2.5 py-1 rounded border border-slate-800 select-all">
+                                  {c.code}
+                                </p>
+                                <button
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(c.code);
+                                    alert(`Copied activation code ${c.code} to clipboard!`);
+                                  }}
+                                  className="text-[10px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded border border-slate-700 cursor-pointer flex items-center gap-1"
+                                >
+                                  <Copy className="w-3 h-3 text-blue-400" /> Copy
+                                </button>
+                              </div>
+                            </div>
+
+                            <button
+                              onClick={() => handleResetUserCode(c.userEmail, c.courseId)}
+                              className="bg-red-950/70 hover:bg-red-900 text-red-300 border border-red-800 text-[11px] font-bold px-3 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer shrink-0"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5 text-red-400" /> Revoke / Reset Code
+                            </button>
                           </div>
-                          <p className="text-xs text-slate-300 font-medium">{req.courseTitle}</p>
-                          <p className="text-[11px] text-slate-500 font-mono">
-                            Requested: {new Date(req.createdAt).toLocaleString()}
-                          </p>
-                        </div>
+                        );
+                      })
+                    ) : (
+                      <p className="text-xs text-slate-500 italic text-center py-6">
+                        No activation codes generated yet. Use the left form to issue a code.
+                      </p>
+                    )}
+                  </div>
+                </div>
 
-                        <button
-                          onClick={() => {
-                            setGenEmail(req.userEmail);
-                            setGenCourseId(req.courseId);
-                            handleGenerateCode(req.userEmail, req.courseId);
-                          }}
-                          className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-md cursor-pointer shrink-0"
+                {/* 2. Payment Requests Table */}
+                <div className="bg-slate-800 border border-slate-700 rounded-2xl p-5 space-y-4 shadow-lg">
+                  <h3 className="font-display font-bold text-sm text-white flex items-center gap-2">
+                    <Mail className="w-4 h-4 text-blue-400" />
+                    Payment Requests ({paymentRequests.length})
+                  </h3>
+
+                  <div className="space-y-3 max-h-[40vh] overflow-y-auto pr-1">
+                    {paymentRequests.length > 0 ? (
+                      paymentRequests.map((req) => (
+                        <div
+                          key={req.id}
+                          className="bg-slate-900 border border-slate-700 p-4 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3"
                         >
-                          Issue Code
-                        </button>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-xs text-slate-500 italic text-center py-8">
-                      No pending payment requests yet.
-                    </p>
-                  )}
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-xs text-white">{req.userEmail}</span>
+                              <span className="text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded">
+                                {req.status}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-300 font-medium">{req.courseTitle}</p>
+                            <p className="text-[11px] text-slate-500 font-mono">
+                              Requested: {new Date(req.createdAt).toLocaleString()}
+                            </p>
+                          </div>
+
+                          <button
+                            onClick={() => {
+                              setGenEmail(req.userEmail);
+                              setGenCourseId(req.courseId);
+                              handleGenerateCode(req.userEmail, req.courseId);
+                            }}
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-md cursor-pointer shrink-0"
+                          >
+                            Issue Code
+                          </button>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-xs text-slate-500 italic text-center py-6">
+                        No pending payment requests yet.
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
