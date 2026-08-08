@@ -241,11 +241,13 @@ export default function App() {
       {selectedCourseForCode && (
         <ActivationCodeModal
           course={selectedCourseForCode}
+          user={user}
           onClose={() => setSelectedCourseForCode(null)}
           onSuccessUnlock={(unlockedCourse) => {
             setSelectedCourseForCode(null);
             setActiveUdemyExamCourse(unlockedCourse);
           }}
+          onOpenAuthModal={() => setIsAuthOpen(true)}
         />
       )}
 

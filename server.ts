@@ -858,6 +858,11 @@ const handleCodeValidation = async (req: express.Request, res: express.Response)
     const cleanEmail = (userEmail || email || "").trim().toLowerCase();
     const targetUuid = resolveCourseUuid(courseId);
 
+    // STRICT AUTH RULE: User MUST be logged in to validate codes
+    if (!cleanEmail) {
+      return res.json({ valid: false, error: "Authentication required. Please log in to your account before entering activation code." });
+    }
+
     if (!cleanCode) {
       return res.json({ valid: false, error: "Please enter an activation code." });
     }
@@ -866,7 +871,7 @@ const handleCodeValidation = async (req: express.Request, res: express.Response)
     const exactMemoryCode = memoryActivationCodes.find((c) => {
       const codeMatch = c.code.trim().toUpperCase() === cleanCode;
       const courseMatch = c.courseId === courseId || resolveCourseUuid(c.courseId) === targetUuid;
-      const emailMatch = !cleanEmail || !c.userEmail || c.userEmail.trim().toLowerCase() === cleanEmail;
+      const emailMatch = c.userEmail && c.userEmail.trim().toLowerCase() === cleanEmail;
       return codeMatch && courseMatch && emailMatch;
     });
 

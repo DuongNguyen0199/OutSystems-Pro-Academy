@@ -9,6 +9,7 @@ interface ActivationCodeModalProps {
   onSuccess?: (course: Course) => void;
   onSuccessUnlock?: (course: Course) => void;
   onRequestPayment?: () => void;
+  onOpenAuthModal?: () => void;
 }
 
 export default function ActivationCodeModal({
@@ -18,6 +19,7 @@ export default function ActivationCodeModal({
   onSuccess,
   onSuccessUnlock,
   onRequestPayment,
+  onOpenAuthModal,
 }: ActivationCodeModalProps) {
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
@@ -36,6 +38,11 @@ export default function ActivationCodeModal({
     setError('');
 
     if (isLocked) return;
+
+    if (!user || !user.email) {
+      setError('Authentication Required: Please log in to your registered account before activating your practice test code.');
+      return;
+    }
 
     const trimmedCode = code.trim().toUpperCase();
 
@@ -110,7 +117,29 @@ export default function ActivationCodeModal({
 
         {/* Content */}
         <form onSubmit={handleValidate} className="p-6 space-y-4">
-          {user ? (
+          {!user ? (
+            <div className="bg-amber-50 border border-amber-200 text-amber-900 text-xs p-4 rounded-xl space-y-2">
+              <div className="flex items-center gap-2 font-bold text-amber-950">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>Account Login Required</span>
+              </div>
+              <p className="text-slate-700 leading-relaxed">
+                You must be logged in to activate a course code so it can be bound to your account.
+              </p>
+              {onOpenAuthModal && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenAuthModal();
+                  }}
+                  className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 rounded-lg text-xs transition-colors shadow cursor-pointer mt-1"
+                >
+                  Log In / Register Account Now
+                </button>
+              )}
+            </div>
+          ) : (
             <div className="bg-blue-50/70 border border-blue-100 rounded-xl p-3 text-xs text-blue-900 flex items-center justify-between">
               <div>
                 <span className="text-slate-500 font-normal">Logged in as: </span>
@@ -118,13 +147,6 @@ export default function ActivationCodeModal({
               </div>
               <span className="text-[10px] bg-blue-200 text-blue-800 font-bold px-2 py-0.5 rounded-full uppercase">
                 {user.role}
-              </span>
-            </div>
-          ) : (
-            <div className="bg-amber-50 border border-amber-200 text-amber-900 text-xs p-3 rounded-xl flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-              <span>
-                Please make sure you enter the code sent to your registered Gmail address.
               </span>
             </div>
           )}
