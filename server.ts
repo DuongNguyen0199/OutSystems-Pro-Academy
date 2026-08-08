@@ -855,45 +855,79 @@ const handleCodeValidation = async (req: express.Request, res: express.Response)
   try {
     const { email, userEmail, code, courseId } = req.body;
     const cleanCode = (code || "").trim().toUpperCase();
+    const cleanEmail = (userEmail || email || "").trim().toLowerCase();
+    const targetUuid = resolveCourseUuid(courseId);
 
     if (!cleanCode) {
-      return res.json({ valid: false, success: false, error: "Please enter an activation code." });
+      return res.json({ valid: false, error: "Please enter an activation code." });
     }
 
-    // 1. Check memory activation codes
-    const foundCode = memoryActivationCodes.find(c => c.code.toUpperCase() === cleanCode);
-    if (foundCode) {
-      if (foundCode.status === 'revoked') {
-        return res.json({ valid: false, success: false, error: "This activation code has been revoked by Admin." });
+    // 1. Check memory activation codes for match on code, course, and email
+    const exactMemoryCode = memoryActivationCodes.find((c) => {
+      const codeMatch = c.code.trim().toUpperCase() === cleanCode;
+      const courseMatch = c.courseId === courseId || resolveCourseUuid(c.courseId) === targetUuid;
+      const emailMatch = !cleanEmail || !c.userEmail || c.userEmail.trim().toLowerCase() === cleanEmail;
+      return codeMatch && courseMatch && emailMatch;
+    });
+
+    if (exactMemoryCode) {
+      if (exactMemoryCode.status === 'revoked') {
+        return res.json({ valid: false, error: "This activation code has been revoked by Admin." });
       }
       return res.json({ valid: true, success: true, message: "Activation code verified! Practice test unlocked." });
     }
 
-    // 2. Check Supabase enrollments table
+    // Check if code exists in memory for a DIFFERENT course or email
+    const anyMemoryCode = memoryActivationCodes.find(c => c.code.trim().toUpperCase() === cleanCode);
+    if (anyMemoryCode) {
+      if (anyMemoryCode.courseId !== courseId && resolveCourseUuid(anyMemoryCode.courseId) !== targetUuid) {
+        return res.json({ valid: false, error: "This activation code was issued for a DIFFERENT course." });
+      }
+      if (cleanEmail && anyMemoryCode.userEmail && anyMemoryCode.userEmail.trim().toLowerCase() !== cleanEmail) {
+        return res.json({ valid: false, error: `This code was issued for ${anyMemoryCode.userEmail}, not ${cleanEmail}.` });
+      }
+    }
+
+    // 2. Check Supabase enrollments table for match on activation_code & course_id
     const supabase = getSupabase();
     if (supabase) {
       const { data: enrollment } = await supabase
         .from("enrollments")
         .select("*")
         .eq("activation_code", cleanCode)
+        .eq("course_id", targetUuid)
         .maybeSingle();
 
       if (enrollment) {
         if (enrollment.status === 'revoked') {
-          return res.json({ valid: false, success: false, error: "This activation code has been revoked by Admin." });
+          return res.json({ valid: false, error: "This activation code has been revoked by Admin." });
+        }
+        if (cleanEmail && enrollment.user_email && enrollment.user_email.trim().toLowerCase() !== cleanEmail) {
+          return res.json({ valid: false, error: `This code was issued for ${enrollment.user_email}, not ${cleanEmail}.` });
         }
         return res.json({ valid: true, success: true, message: "Activation code verified! Practice test unlocked." });
       }
+
+      // Check if code exists in Supabase for a DIFFERENT course
+      const { data: diffEnrollment } = await supabase
+        .from("enrollments")
+        .select("*")
+        .eq("activation_code", cleanCode)
+        .maybeSingle();
+
+      if (diffEnrollment) {
+        if (diffEnrollment.course_id !== targetUuid) {
+          return res.json({ valid: false, error: "This activation code was issued for a DIFFERENT course." });
+        }
+        if (cleanEmail && diffEnrollment.user_email && diffEnrollment.user_email.trim().toLowerCase() !== cleanEmail) {
+          return res.json({ valid: false, error: `This code was issued for ${diffEnrollment.user_email}, not ${cleanEmail}.` });
+        }
+      }
     }
 
-    // 3. Fallback: If code starts with OUT- or contains 90D or is valid length
-    if (cleanCode.startsWith("OUT-") || cleanCode.includes("90D") || cleanCode.length >= 8) {
-      return res.json({ valid: true, success: true, message: "Activation code verified! Practice test unlocked." });
-    }
-
-    res.json({ valid: false, success: false, error: "Invalid activation code for this course." });
+    res.json({ valid: false, error: "Invalid activation code or course mismatch." });
   } catch (err: any) {
-    res.json({ valid: true, success: true, message: "Activation code accepted." });
+    res.json({ valid: false, error: "Error validating activation code." });
   }
 };
 

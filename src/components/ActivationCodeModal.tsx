@@ -62,31 +62,25 @@ export default function ActivationCodeModal({
         if (data.valid || data.success) {
           triggerSuccess();
           return;
-        } else if (data.error && data.error.includes('revoked')) {
-          setError(data.error);
-          setLoading(false);
+        } else {
+          const newAttempts = attempts + 1;
+          setAttempts(newAttempts);
+          if (newAttempts >= 5) {
+            setIsLocked(true);
+            setError('Code locked! You have exceeded 5 failed attempts. Please contact Admin at duongrbt@gmail.com.');
+          } else {
+            setError(data.error || data.message || `Invalid activation code for ${course.title}. Attempt ${newAttempts} of 5.`);
+          }
           return;
         }
       }
     } catch (err) {
       console.warn('API validate-code call note:', err);
+      const newAttempts = attempts + 1;
+      setAttempts(newAttempts);
+      setError(`Network error validating activation code. Attempt ${newAttempts} of 5.`);
     } finally {
       setLoading(false);
-    }
-
-    // Bulletproof Fallback: If code starts with OUT- or contains -90D- or is valid format, unlock test!
-    if (trimmedCode.startsWith('OUT-') || trimmedCode.includes('-90D-') || trimmedCode.length >= 10) {
-      triggerSuccess();
-      return;
-    }
-
-    const newAttempts = attempts + 1;
-    setAttempts(newAttempts);
-    if (newAttempts >= 5) {
-      setIsLocked(true);
-      setError('Code locked! You have exceeded 5 failed attempts. Please contact Admin at duongrbt@gmail.com.');
-    } else {
-      setError(`Invalid activation code format for ${course.title}. Attempt ${newAttempts} of 5.`);
     }
   };
 
