@@ -38,16 +38,63 @@ export default function UdemyMockExam({ course, onClose }: UdemyMockExamProps) {
         }
       ];
 
-  const [selectedSet, setSelectedSet] = useState<ExamSet>(defaultSets[0]);
+  // Helper: Fisher-Yates Shuffle
+  const shuffleArray = <T,>(array: T[]): T[] => {
+    const arr = [...array];
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  };
 
-  // Exam Phases: 'select_set' -> 'confirm_details' -> 'intro' -> 'exam' -> 'result'
-  const [examPhase, setExamPhase] = useState<'select_set' | 'confirm_details' | 'intro' | 'exam' | 'result'>(
-    defaultSets.length > 1 ? 'select_set' : 'confirm_details'
-  );
+  // Helper: Shuffle question choices while updating correct answer key
+  const shuffleQuestionChoices = (q: MockExamQuestion): MockExamQuestion => {
+    if (!q.choices || q.choices.length < 2) return q;
+    const correctChoiceObj = q.choices.find((c) => c.key === q.correctAnswer);
+    const shuffledChoicesRaw = shuffleArray(q.choices);
+    const keys = ['A', 'B', 'C', 'D', 'E', 'F'];
+    let newCorrectKey = 'A';
 
-  const questions: MockExamQuestion[] = selectedSet.questions && selectedSet.questions.length > 0
-    ? selectedSet.questions
-    : (course.mockExam || []);
+    const newChoices = shuffledChoicesRaw.map((choice, idx) => {
+      const newKey = keys[idx] || choice.key;
+      if (correctChoiceObj && choice.key === correctChoiceObj.key) {
+        newCorrectKey = newKey;
+      }
+      return {
+        key: newKey,
+        text: choice.text
+      };
+    });
+
+    return {
+      ...q,
+      choices: newChoices,
+      correctAnswer: newCorrectKey
+    };
+  };
+
+  // 1. Randomly pick an exam set (Dump 01 - 06)
+  const getRandomSet = () => {
+    const randomIndex = Math.floor(Math.random() * defaultSets.length);
+    return defaultSets[randomIndex];
+  };
+
+  // 2. Prepare shuffled questions
+  const getShuffledQuestions = (set: ExamSet) => {
+    const rawQuestions = set.questions && set.questions.length > 0
+      ? set.questions
+      : (course.mockExam || []);
+    const shuffledQs = shuffleArray(rawQuestions);
+    return shuffledQs.map(shuffleQuestionChoices);
+  };
+
+  // State initialization for randomly assigned set and randomized questions
+  const [selectedSet, setSelectedSet] = useState<ExamSet>(() => getRandomSet());
+  const [questions, setQuestions] = useState<MockExamQuestion[]>(() => getShuffledQuestions(selectedSet));
+
+  // Directly start in 'confirm_details' phase (Prometric Schedule Exam screen)
+  const [examPhase, setExamPhase] = useState<'confirm_details' | 'intro' | 'exam' | 'result'>('confirm_details');
 
   const durationSecs = (selectedSet.durationMinutes || 90) * 60;
   const passingPctThreshold = selectedSet.passingScorePct || 70;
@@ -128,6 +175,19 @@ export default function UdemyMockExam({ course, onClose }: UdemyMockExamProps) {
     setIsSubmitted(true);
     setExamPhase('result');
     setShowConfirmFinishModal(false);
+  };
+
+  const handleRetakeRandomExam = () => {
+    const nextSet = getRandomSet();
+    const nextQuestions = getShuffledQuestions(nextSet);
+    setSelectedSet(nextSet);
+    setQuestions(nextQuestions);
+    setCurrentIndex(0);
+    setSelectedAnswers({});
+    setFlaggedQuestions({});
+    setTimeLeft((nextSet.durationMinutes || 90) * 60);
+    setIsSubmitted(false);
+    setExamPhase('confirm_details');
   };
 
   const calculateScore = () => {
@@ -303,6 +363,13 @@ export default function UdemyMockExam({ course, onClose }: UdemyMockExamProps) {
               <div className="grid grid-cols-3 gap-2">
                 <span className="text-slate-500 font-medium">Time Allowed:</span>
                 <span className="col-span-2 font-bold text-slate-900">{Math.round((questions.length * 90) / 60)} Minutes</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <span className="text-slate-500 font-medium">Exam Set Assigned:</span>
+                <span className="col-span-2 font-bold text-purple-700 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                  {selectedSet.title} (Randomly Assigned & Shuffled)
+                </span>
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <span className="text-slate-500 font-medium">Language:</span>
@@ -789,12 +856,21 @@ export default function UdemyMockExam({ course, onClose }: UdemyMockExamProps) {
                 {course.title}
               </h2>
             </div>
-            <button
-              onClick={onClose}
-              className="bg-slate-700 hover:bg-slate-600 text-white font-bold px-4 py-2 rounded text-xs flex items-center gap-2 cursor-pointer"
-            >
-              <X className="w-4 h-4" /> Close Exam
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleRetakeRandomExam}
+                className="bg-[#76b82a] hover:bg-[#68a424] text-white font-bold px-4 py-2 rounded text-xs flex items-center gap-1.5 cursor-pointer shadow-sm transition-all"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Thi lại (Random Đề mới)</span>
+              </button>
+              <button
+                onClick={onClose}
+                className="bg-slate-700 hover:bg-slate-600 text-white font-bold px-4 py-2 rounded text-xs flex items-center gap-2 cursor-pointer"
+              >
+                <X className="w-4 h-4" /> Close Exam
+              </button>
+            </div>
           </div>
 
           {/* Score Summary Box */}
