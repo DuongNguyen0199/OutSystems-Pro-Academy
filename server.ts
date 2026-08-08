@@ -152,15 +152,20 @@ app.get("/api/courses", async (req, res) => {
 
       let imageUrl = item.image_url || item.imageUrl || item.image || (fallback ? fallback.imageUrl : "/src/assets/images/agentic_ai_1783426796399.jpg");
 
+      const targetUuid = resolveCourseUuid(item.id);
+      const hex = targetUuid.replace(/-/g, '');
+      const targetExamId = `${hex.substring(0, 8)}-${hex.substring(8, 12)}-4${hex.substring(13, 16)}-a${hex.substring(17, 20)}-${hex.substring(20, 32)}`;
+
       // Check if memory has freshly imported questions for this course
-      let mockExam = inMemoryCourseQuestions[item.id] || inMemoryCourseQuestions[resolveCourseUuid(item.id)];
+      let mockExam = inMemoryCourseQuestions[item.id] || inMemoryCourseQuestions[targetUuid];
 
       if (!mockExam || mockExam.length === 0) {
-        const targetUuid = resolveCourseUuid(item.id);
-        const hex = targetUuid.replace(/-/g, '');
-        const targetExamId = `${hex.substring(0, 8)}-${hex.substring(8, 12)}-4${hex.substring(13, 16)}-a${hex.substring(17, 20)}-${hex.substring(20, 32)}`;
-
-        const matchedEqs = dbExamQuestions.filter((eq: any) => eq.exam_id === targetExamId);
+        const matchedEqs = dbExamQuestions.filter((eq: any) => 
+          eq.exam_id === targetExamId || 
+          eq.exam_id === item.id || 
+          eq.course_id === targetUuid || 
+          eq.course_id === item.id
+        );
 
         if (matchedEqs.length > 0) {
           mockExam = matchedEqs.map((eq: any) => {
@@ -188,17 +193,35 @@ app.get("/api/courses", async (req, res) => {
         }
       }
 
-      const sets = item.exam_sets || inMemoryCourseExamSets[item.id] || inMemoryCourseExamSets[targetUuid] || [
-        {
-          id: 'set-1',
-          title: 'Dump 01',
-          description: 'Bài kiểm tra thực hành Dump 01',
-          durationMinutes: 90,
-          passingScorePct: 70,
-          randomizeQuestions: false,
-          questions: mockExam
+      // Parse exam_sets from DB row (handles string or JSONB)
+      let sets = item.exam_sets;
+      if (typeof sets === 'string') {
+        try { sets = JSON.parse(sets); } catch (e) {}
+      }
+
+      if (!sets || !Array.isArray(sets) || sets.length === 0) {
+        sets = inMemoryCourseExamSets[item.id] || inMemoryCourseExamSets[targetUuid];
+      }
+
+      if (!sets || !Array.isArray(sets) || sets.length === 0) {
+        sets = [
+          {
+            id: 'set-1',
+            title: 'Dump 01',
+            description: 'Bài kiểm tra thực hành Dump 01',
+            durationMinutes: 90,
+            passingScorePct: 70,
+            randomizeQuestions: false,
+            questions: mockExam
+          }
+        ];
+      } else {
+        // Ensure mockExam matches the questions from exam_sets if sets exists
+        const allSetQuestions = sets.flatMap((s: any) => s.questions || []);
+        if (allSetQuestions.length > 0) {
+          mockExam = allSetQuestions;
         }
-      ];
+      }
 
       return {
         id: item.id,
@@ -632,6 +655,39 @@ app.post("/api/admin/courses/upsert", requireAdminAuth, async (req, res) => {
   }
 });
 
+// Helper function to sync exam_sets to Supabase courses table across courseId & targetUuid
+async function syncCourseExamSetsToSupabase(supabase: any, courseId: string, targetUuid: string, examSets: any[]) {
+  if (!supabase) return;
+  const fallbackObj = fallbackCourses.find(f => f.id === courseId) || fallbackCourses[0];
+
+  try {
+    await supabase.from('courses').update({ exam_sets: examSets }).eq('id', courseId);
+  } catch (e) {}
+  try {
+    await supabase.from('courses').update({ exam_sets: examSets }).eq('id', targetUuid);
+  } catch (e) {}
+  try {
+    await supabase.from('courses').upsert({
+      id: courseId,
+      title: fallbackObj.title,
+      price: fallbackObj.price || 29.99,
+      image_url: fallbackObj.imageUrl || '',
+      description: fallbackObj.description || '',
+      exam_sets: examSets
+    });
+  } catch (e) {}
+  try {
+    await supabase.from('courses').upsert({
+      id: targetUuid,
+      title: fallbackObj.title,
+      price: fallbackObj.price || 29.99,
+      image_url: fallbackObj.imageUrl || '',
+      description: fallbackObj.description || '',
+      exam_sets: examSets
+    });
+  } catch (e) {}
+}
+
 // SAVE QUESTIONS ENDPOINT FULLY CONNECTED TO SUPABASE 3NF SCHEMA ('exam_questions' & 'question_options')
 app.post("/api/admin/questions/import", requireAdminAuth, async (req, res) => {
   try {
@@ -644,20 +700,35 @@ app.post("/api/admin/questions/import", requireAdminAuth, async (req, res) => {
     inMemoryCourseQuestions[courseId] = questions;
     inMemoryCourseQuestions[targetUuid] = questions;
 
+    // Sync in-memory examSets as well
+    const currentMemorySets = inMemoryCourseExamSets[courseId] || inMemoryCourseExamSets[targetUuid];
+    let updatedSets = currentMemorySets;
+    if (!updatedSets || updatedSets.length === 0) {
+      updatedSets = [
+        {
+          id: 'set-1',
+          title: 'Dump 01',
+          description: 'Bài kiểm tra thực hành Dump 01',
+          durationMinutes: 90,
+          passingScorePct: 70,
+          randomizeQuestions: false,
+          questions: questions
+        }
+      ];
+    } else {
+      updatedSets = updatedSets.map((s, i) => i === 0 ? { ...s, questions: questions } : s);
+    }
+    inMemoryCourseExamSets[courseId] = updatedSets;
+    inMemoryCourseExamSets[targetUuid] = updatedSets;
+
     const supabase = getSupabase();
 
     if (supabase) {
-      // 0. Ensure course record exists in 'courses' table to satisfy Foreign Keys
-      const fallbackObj = fallbackCourses.find(f => f.id === courseId) || fallbackCourses[0];
-      await supabase.from('courses').upsert({
-        id: targetUuid,
-        title: fallbackObj.title,
-        price: fallbackObj.price || 29.99,
-        image_url: fallbackObj.imageUrl || '',
-        description: fallbackObj.description || ''
-      });
+      // 0. Sync exam_sets JSONB to courses table
+      await syncCourseExamSetsToSupabase(supabase, courseId, targetUuid, updatedSets);
 
       // 1. Ensure exam parent record exists in 'exams' table
+      const fallbackObj = fallbackCourses.find(f => f.id === courseId) || fallbackCourses[0];
       const hex = targetUuid.replace(/-/g, '');
       const examId = `${hex.substring(0, 8)}-${hex.substring(8, 12)}-4${hex.substring(13, 16)}-a${hex.substring(17, 20)}-${hex.substring(20, 32)}`;
 
@@ -712,7 +783,7 @@ app.post("/api/admin/questions/import", requireAdminAuth, async (req, res) => {
 
     res.json({
       success: true,
-      message: `Successfully saved ${questions.length} questions to Supabase database ('exam_questions' & 'question_options')!`
+      message: `Successfully saved ${questions.length} questions to Supabase database!`
     });
   } catch (err: any) {
     console.error("Save questions error:", err);
@@ -739,13 +810,8 @@ app.post("/api/admin/courses/sets/update", requireAdminAuth, async (req, res) =>
 
     const supabase = getSupabase();
     if (supabase) {
-      // 1. Update `exam_sets` JSONB column in `courses` table
-      try {
-        await supabase
-          .from('courses')
-          .update({ exam_sets: examSets })
-          .eq('id', targetUuid);
-      } catch (e) {}
+      // 1. Sync exam_sets JSONB column across courseId and targetUuid
+      await syncCourseExamSetsToSupabase(supabase, courseId, targetUuid, examSets);
 
       // 2. Sync all questions to 3NF schema tables ('exam_questions' & 'question_options')
       if (allQuestions.length > 0) {
@@ -753,15 +819,6 @@ app.post("/api/admin/courses/sets/update", requireAdminAuth, async (req, res) =>
           const fallbackObj = fallbackCourses.find(f => f.id === courseId) || fallbackCourses[0];
           const hex = targetUuid.replace(/-/g, '');
           const examId = `${hex.substring(0, 8)}-${hex.substring(8, 12)}-4${hex.substring(13, 16)}-a${hex.substring(17, 20)}-${hex.substring(20, 32)}`;
-
-          await supabase.from('courses').upsert({
-            id: targetUuid,
-            title: fallbackObj.title,
-            price: fallbackObj.price || 29.99,
-            image_url: fallbackObj.imageUrl || '',
-            description: fallbackObj.description || '',
-            exam_sets: examSets
-          });
 
           await supabase.from('exams').upsert({
             id: examId,
