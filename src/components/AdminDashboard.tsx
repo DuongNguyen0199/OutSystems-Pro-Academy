@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Course, MockExamQuestion, PaymentRequest, ActivationCode } from '../types';
+import { Course, MockExamQuestion, PaymentRequest, ActivationCode, ExamSet } from '../types';
 import {
   X,
   Upload,
@@ -47,6 +47,15 @@ export default function AdminDashboard({
   const [activeTab, setActiveTab] = useState<'courses' | 'payments' | 'questions' | 'users' | 'notifications'>('courses');
   const [selectedCourseId, setSelectedCourseId] = useState<string>(courses[0]?.id || '');
   const [searchQuestionQuery, setSearchQuestionQuery] = useState('');
+
+  // Exam Set Management State (Screenshot 1 & Screenshot 2)
+  const [selectedSetId, setSelectedSetId] = useState<string | null>(null);
+  const [setFormTitle, setSetFormTitle] = useState('Dump 01');
+  const [setFormDesc, setSetFormDesc] = useState('');
+  const [setFormDuration, setSetFormDuration] = useState<number>(90);
+  const [setFormPassing, setSetFormPassing] = useState<number>(70);
+  const [setFormRandomize, setSetFormRandomize] = useState<boolean>(false);
+  const [csvImportMode, setCsvImportMode] = useState<'replace_all' | 'target_set'>('replace_all');
 
   // Payment requests & activation codes state
   const [paymentRequests, setPaymentRequests] = useState<PaymentRequest[]>([]);
@@ -474,6 +483,136 @@ export default function AdminDashboard({
     }
   };
 
+  // Helper to ensure course has at least 1 exam set
+  const getCourseExamSets = (c: Course): ExamSet[] => {
+    if (c.examSets && c.examSets.length > 0) return c.examSets;
+    return [
+      {
+        id: 'set-1',
+        title: 'Dump 01',
+        description: 'Bài kiểm tra thực hành Dump 01',
+        durationMinutes: 90,
+        passingScorePct: 70,
+        randomizeQuestions: false,
+        questions: c.mockExam || []
+      }
+    ];
+  };
+
+  const saveExamSetsToBackend = async (cId: string, setsToSave: ExamSet[]) => {
+    try {
+      await fetch('/api/admin/courses/sets/update', {
+        method: 'POST',
+        headers: getAdminHeaders(),
+        body: JSON.stringify({
+          courseId: cId,
+          examSets: setsToSave
+        })
+      });
+    } catch (e) {
+      console.warn('Save exam sets note:', e);
+    }
+  };
+
+  const handleAddExamSet = () => {
+    const currentCourse = courses.find((c) => c.id === selectedCourseId);
+    if (!currentCourse) return;
+    const currentSets = getCourseExamSets(currentCourse);
+
+    if (currentSets.length >= 6) {
+      alert('Tối đa 6 bộ đề thi thực hành cho mỗi khóa học!');
+      return;
+    }
+
+    const setNum = currentSets.length + 1;
+    const newSet: ExamSet = {
+      id: `set-${Date.now()}`,
+      title: `Dump 0${setNum}`,
+      description: `Mô tả bài kiểm tra thực hành Dump 0${setNum} cho học viên`,
+      durationMinutes: 90,
+      passingScorePct: 70,
+      randomizeQuestions: false,
+      questions: []
+    };
+
+    const updatedSets = [...currentSets, newSet];
+    const updatedCourses = courses.map((c) => {
+      if (c.id === selectedCourseId) {
+        return { ...c, examSets: updatedSets };
+      }
+      return c;
+    });
+
+    onUpdateCourses(updatedCourses);
+    saveExamSetsToBackend(selectedCourseId, updatedSets);
+  };
+
+  const handleOpenEditExamSet = (s: ExamSet) => {
+    setSelectedSetId(s.id);
+    setSetFormTitle(s.title);
+    setSetFormDesc(s.description || '');
+    setSetFormDuration(s.durationMinutes || 90);
+    setSetFormPassing(s.passingScorePct || 70);
+    setSetFormRandomize(Boolean(s.randomizeQuestions));
+  };
+
+  const handleSaveSetSettings = () => {
+    if (!selectedSetId) return;
+    const currentCourse = courses.find((c) => c.id === selectedCourseId);
+    if (!currentCourse) return;
+    const currentSets = getCourseExamSets(currentCourse);
+
+    const updatedSets = currentSets.map((s) => {
+      if (s.id === selectedSetId) {
+        return {
+          ...s,
+          title: setFormTitle,
+          description: setFormDesc,
+          durationMinutes: Number(setFormDuration),
+          passingScorePct: Number(setFormPassing),
+          randomizeQuestions: setFormRandomize
+        };
+      }
+      return s;
+    });
+
+    const updatedCourses = courses.map((c) => {
+      if (c.id === selectedCourseId) {
+        return { ...c, examSets: updatedSets };
+      }
+      return c;
+    });
+
+    onUpdateCourses(updatedCourses);
+    saveExamSetsToBackend(selectedCourseId, updatedSets);
+    alert('Đã lưu cấu hình bài kiểm tra thực hành thành công!');
+  };
+
+  const handleDeleteExamSet = (setId: string) => {
+    const currentCourse = courses.find((c) => c.id === selectedCourseId);
+    if (!currentCourse) return;
+    const currentSets = getCourseExamSets(currentCourse);
+
+    if (currentSets.length <= 1) {
+      alert('Phải giữ lại ít nhất 1 bộ đề thi cho khóa học!');
+      return;
+    }
+
+    if (!confirm('Bạn có chắc chắn muốn xóa bộ đề thi này?')) return;
+
+    const updatedSets = currentSets.filter((s) => s.id !== setId);
+    const updatedCourses = courses.map((c) => {
+      if (c.id === selectedCourseId) {
+        return { ...c, examSets: updatedSets };
+      }
+      return c;
+    });
+
+    onUpdateCourses(updatedCourses);
+    saveExamSetsToBackend(selectedCourseId, updatedSets);
+    if (selectedSetId === setId) setSelectedSetId(null);
+  };
+
   // Open Question Edit Modal
   const handleOpenAddQuestion = () => {
     setEditingQuestion(null);
@@ -519,24 +658,36 @@ export default function AdminDashboard({
       imageUrl: imgUrl || undefined
     };
 
-    let finalMockQuestions: MockExamQuestion[] = [];
+    const currentCourse = courses.find((c) => c.id === selectedCourseId);
+    if (!currentCourse) return;
+    const currentSets = getCourseExamSets(currentCourse);
+    const activeSetId = selectedSetId || currentSets[0].id;
+
+    const updatedSets = currentSets.map((s) => {
+      if (s.id === activeSetId) {
+        let updatedQs = s.questions || [];
+        if (editingQuestion) {
+          updatedQs = updatedQs.map((q) => (q.id === editingQuestion.id ? newQ : q));
+        } else {
+          updatedQs = [newQ, ...updatedQs];
+        }
+        return { ...s, questions: updatedQs };
+      }
+      return s;
+    });
+
+    const allQuestions = updatedSets.flatMap(s => s.questions);
     const updatedCourses = courses.map((c) => {
       if (c.id === selectedCourseId) {
-        let updatedMock = c.mockExam || [];
-        if (editingQuestion) {
-          updatedMock = updatedMock.map((q) => (q.id === editingQuestion.id ? newQ : q));
-        } else {
-          updatedMock = [newQ, ...updatedMock];
-        }
-        finalMockQuestions = updatedMock;
-        return { ...c, mockExam: updatedMock };
+        return { ...c, mockExam: allQuestions, examSets: updatedSets };
       }
       return c;
     });
 
     onUpdateCourses(updatedCourses);
     setIsQuestionModalOpen(false);
-    handleSaveAllQuestionsToSupabase(finalMockQuestions);
+    saveExamSetsToBackend(selectedCourseId, updatedSets);
+    handleSaveAllQuestionsToSupabase(allQuestions);
   };
 
   const handleDeleteQuestion = (id: string) => {
@@ -700,17 +851,59 @@ export default function AdminDashboard({
       }
 
       if (newQuestions.length > 0) {
-        // REPLACES ALL OLD QUESTIONS WITH FRESH NEW CSV QUESTIONS
-        const updatedCourses = courses.map((c) => {
-          if (c.id === selectedCourseId) {
-            return { ...c, mockExam: newQuestions };
-          }
-          return c;
-        });
+        const currentCourse = courses.find((c) => c.id === selectedCourseId);
+        if (!currentCourse) return;
 
-        onUpdateCourses(updatedCourses);
-        // Automatically save to Supabase
-        await handleSaveAllQuestionsToSupabase(newQuestions);
+        if (csvImportMode === 'replace_all') {
+          // Bulk replace all old exam sets with fresh Dump 01
+          const newSets: ExamSet[] = [
+            {
+              id: 'set-1',
+              title: 'Dump 01',
+              description: 'Bài kiểm tra thực hành Dump 01',
+              durationMinutes: 90,
+              passingScorePct: 70,
+              randomizeQuestions: false,
+              questions: newQuestions
+            }
+          ];
+
+          const updatedCourses = courses.map((c) => {
+            if (c.id === selectedCourseId) {
+              return { ...c, mockExam: newQuestions, examSets: newSets };
+            }
+            return c;
+          });
+
+          onUpdateCourses(updatedCourses);
+          await saveExamSetsToBackend(selectedCourseId, newSets);
+          await handleSaveAllQuestionsToSupabase(newQuestions);
+          setCsvMessage(`✅ Đã thay thế hàng loạt ${newQuestions.length} câu hỏi mới vào Dump 01!`);
+        } else {
+          // Import into selected / active Exam Set
+          const currentSets = getCourseExamSets(currentCourse);
+          const activeSetId = selectedSetId || currentSets[0].id;
+
+          const updatedSets = currentSets.map((s) => {
+            if (s.id === activeSetId) {
+              return { ...s, questions: newQuestions };
+            }
+            return s;
+          });
+
+          const allQs = updatedSets.flatMap(s => s.questions);
+          const updatedCourses = courses.map((c) => {
+            if (c.id === selectedCourseId) {
+              return { ...c, mockExam: allQs, examSets: updatedSets };
+            }
+            return c;
+          });
+
+          onUpdateCourses(updatedCourses);
+          await saveExamSetsToBackend(selectedCourseId, updatedSets);
+          await handleSaveAllQuestionsToSupabase(allQs);
+          setCsvMessage(`✅ Đã cập nhật ${newQuestions.length} câu hỏi vào bộ đề!`);
+        }
       } else {
         setCsvMessage('Could not parse questions. Check CSV columns format.');
       }
@@ -1348,168 +1541,331 @@ export default function AdminDashboard({
           </div>
         )}
 
-        {/* TAB 4: QUESTION BANK & CSV FILE IMPORTER */}
+        {/* TAB 4: QUESTION BANK & EXAM SETS (Up to 6 sets per course) */}
         {activeTab === 'questions' && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
                 <h2 className="font-display font-extrabold text-xl text-white flex items-center gap-2.5">
                   <FileSpreadsheet className="w-6 h-6 text-blue-400" />
-                  Question Bank & CSV File Importer
+                  Question Bank & Exam Sets Manager
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">
-                  Import CSV files from your computer or download TemplateOSDump.csv format.
+                  Quản lý tối đa 6 bộ đề thi thực hành (Dump 01 - 06) và Cấu hình Thời lượng, Điểm đạt, CSV Import.
                 </p>
               </div>
 
               <select
                 value={selectedCourseId}
-                onChange={(e) => setSelectedCourseId(e.target.value)}
-                className="bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white font-bold outline-none focus:border-blue-500"
+                onChange={(e) => {
+                  setSelectedCourseId(e.target.value);
+                  setSelectedSetId(null);
+                }}
+                className="bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white font-bold outline-none focus:border-blue-500 cursor-pointer"
               >
                 {courses.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.title} ({c.mockExam?.length || 0} questions)
+                    {c.title} ({getCourseExamSets(c).length} Bộ đề)
                   </option>
                 ))}
               </select>
             </div>
 
-            {/* CSV Action Controls Box & Save Button */}
-            <div className="bg-slate-800 border border-slate-700 p-5 rounded-2xl space-y-4">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div>
-                  <h3 className="font-display font-bold text-sm text-white flex items-center gap-2">
-                    <Upload className="w-4 h-4 text-blue-400" /> CSV Question Import & Database Sync
-                  </h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Target Course: <strong className="text-blue-300">{selectedCourse.title}</strong>
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-3">
-                  {/* Download Template Button */}
-                  <button
-                    onClick={handleDownloadTemplate}
-                    className="bg-slate-700 hover:bg-slate-600 border border-slate-600 text-slate-200 font-bold text-xs py-2.5 px-4 rounded-xl flex items-center gap-2 transition-all cursor-pointer shadow-sm"
-                  >
-                    <Download className="w-4 h-4 text-emerald-400" />
-                    <span>Download CSV Template</span>
-                  </button>
-
-                  {/* Import Questions Button */}
-                  <button
-                    onClick={() => setIsConfirmImportOpen(true)}
-                    className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs py-2.5 px-5 rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
-                  >
-                    <Upload className="w-4 h-4" />
-                    <span>Import Questions</span>
-                  </button>
-
-                  {/* PROMINENT SAVE TO SUPABASE BUTTON */}
-                  <button
-                    onClick={() => handleSaveAllQuestionsToSupabase()}
-                    disabled={isSavingQuestions}
-                    className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-2.5 px-5 rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
-                  >
-                    <Save className="w-4 h-4 text-white" />
-                    <span>{isSavingQuestions ? 'Saving...' : 'Save to Supabase Database'}</span>
-                  </button>
-                </div>
+            {/* CSV Action Bar */}
+            <div className="bg-slate-800 border border-slate-700 p-4 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <h3 className="font-display font-bold text-xs text-white flex items-center gap-2">
+                  <Upload className="w-4 h-4 text-blue-400" /> CSV Import & Storage Sync
+                </h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Target Course: <strong className="text-blue-300">{selectedCourse.title}</strong>
+                </p>
               </div>
 
-              {csvMessage && (
-                <div className="bg-slate-900 border border-slate-700 p-3 rounded-xl text-xs font-bold text-emerald-400 animate-in fade-in">
-                  {csvMessage}
-                </div>
-              )}
+              <div className="flex flex-wrap items-center gap-2.5">
+                <button
+                  onClick={handleDownloadTemplate}
+                  className="bg-slate-700 hover:bg-slate-600 border border-slate-600 text-slate-200 font-bold text-xs py-2 px-3.5 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+                >
+                  <Download className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Download Template CSV</span>
+                </button>
+
+                <button
+                  onClick={() => setIsConfirmImportOpen(true)}
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs py-2 px-4 rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Import Questions (CSV)</span>
+                </button>
+
+                <button
+                  onClick={() => handleSaveAllQuestionsToSupabase()}
+                  disabled={isSavingQuestions}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-2 px-4 rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Save className="w-3.5 h-3.5 text-white" />
+                  <span>{isSavingQuestions ? 'Saving...' : 'Save to Supabase'}</span>
+                </button>
+              </div>
             </div>
 
-            {/* Questions Table & Search */}
-            <div className="bg-slate-800 border border-slate-700 p-5 rounded-2xl space-y-4">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-700 pb-3">
-                <h3 className="font-display font-bold text-xs text-slate-300">
-                  Questions for <span className="text-white">{selectedCourse.title}</span> ({selectedCourse.mockExam?.length || 0})
-                </h3>
-
-                <div className="flex items-center gap-3 w-full sm:w-auto">
-                  <div className="relative flex-1 sm:w-64">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                    <input
-                      type="text"
-                      placeholder="Filter questions..."
-                      value={searchQuestionQuery}
-                      onChange={(e) => setSearchQuestionQuery(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white outline-none focus:border-blue-500"
-                    />
-                  </div>
-                  <button
-                    onClick={handleOpenAddQuestion}
-                    className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1 cursor-pointer shrink-0"
-                  >
-                    <Plus className="w-4 h-4" /> Add Question
-                  </button>
-                </div>
+            {csvMessage && (
+              <div className="bg-slate-900 border border-slate-700 p-3 rounded-xl text-xs font-bold text-emerald-400 animate-in fade-in">
+                {csvMessage}
               </div>
+            )}
 
-              <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
-                {filteredQuestions.length > 0 ? (
-                  filteredQuestions.map((q, idx) => (
+            {/* SCREENSHOT 1 VIEW: OVERVIEW OF EXAM SETS FOR COURSE (When selectedSetId === null) */}
+            {selectedSetId === null ? (
+              <div className="bg-slate-800 border border-slate-700 p-6 rounded-2xl space-y-6">
+                <div className="flex items-center justify-between border-b border-slate-700/80 pb-4">
+                  <div>
+                    <h3 className="font-display font-bold text-base text-white flex items-center gap-2">
+                      <BookOpen className="w-5 h-5 text-purple-400" />
+                      Chương trình giảng dạy — Các bài kiểm tra thực hành
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Tối đa 6 bộ đề thi thực hành cho từng khóa học ({getCourseExamSets(selectedCourse).length}/6 bộ đề đã tạo).
+                    </p>
+                  </div>
+
+                  <span className="text-xs font-mono bg-purple-950/80 border border-purple-800 text-purple-300 font-bold px-3 py-1 rounded-full">
+                    {getCourseExamSets(selectedCourse).length} / 6 Dumps
+                  </span>
+                </div>
+
+                {/* Exam Sets List (Screenshot 1 Match) */}
+                <div className="space-y-3">
+                  {getCourseExamSets(selectedCourse).map((s, idx) => (
                     <div
-                      key={q.id}
-                      className="bg-slate-900 border border-slate-700/80 p-4 rounded-xl text-xs flex justify-between items-start gap-4 hover:border-slate-600 transition-all cursor-pointer"
-                      onClick={() => handleOpenEditQuestion(q)}
+                      key={s.id || idx}
+                      className="bg-slate-900 border border-slate-700/90 hover:border-purple-500/60 p-4 rounded-xl flex items-center justify-between gap-4 transition-all"
                     >
-                      <div className="space-y-2 flex-1">
-                        <p className="font-bold text-slate-100 leading-relaxed">
-                          {idx + 1}. {q.question}
-                        </p>
-
-                        {q.imageUrl && (
-                          <div className="p-2 bg-slate-950 border border-slate-800 rounded-lg inline-block">
-                            <img src={q.imageUrl} alt="Diagram" className="max-h-24 object-contain rounded" />
+                      <div className="flex items-center gap-3.5">
+                        <div className="w-7 h-7 rounded-full bg-slate-800 border border-slate-600 text-white flex items-center justify-center font-bold text-xs shrink-0">
+                          ✓
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-white text-sm">
+                            Bài kiểm tra thực hành {idx + 1}: {s.title}
+                          </h4>
+                          <div className="flex items-center gap-3 text-xs text-slate-400 mt-1">
+                            <span>{s.questions?.length || 0} câu hỏi</span>
+                            <span>•</span>
+                            <span>{s.durationMinutes || 90} phút</span>
+                            <span>•</span>
+                            <span>Đạt {s.passingScorePct || 70}%</span>
                           </div>
-                        )}
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-400">
-                          {q.choices.map((c) => (
-                            <div
-                              key={c.key}
-                              className={`p-2 rounded-lg border ${
-                                c.key === q.correctAnswer
-                                  ? 'bg-emerald-950/60 border-emerald-500/50 text-emerald-300 font-bold'
-                                  : 'bg-slate-950/50 border-slate-800 text-slate-400'
-                              }`}
-                            >
-                              <span className="font-mono font-bold mr-1.5">{c.key}.</span> {c.text}
-                            </div>
-                          ))}
                         </div>
                       </div>
 
-                      <div className="flex gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center gap-2 shrink-0">
                         <button
-                          onClick={() => handleOpenEditQuestion(q)}
-                          className="text-blue-400 hover:text-blue-200 p-1.5 hover:bg-slate-800 rounded-lg"
+                          onClick={() => handleOpenEditExamSet(s)}
+                          className="bg-purple-900/60 hover:bg-purple-800 text-purple-200 border border-purple-700 text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
                         >
-                          <Edit2 className="w-4 h-4" />
+                          <Edit2 className="w-3.5 h-3.5 text-purple-300" />
+                          <span>Lập kế hoạch (Chỉnh sửa)</span>
                         </button>
+
+                        {getCourseExamSets(selectedCourse).length > 1 && (
+                          <button
+                            onClick={() => handleDeleteExamSet(s.id)}
+                            className="bg-red-950/60 hover:bg-red-900 text-red-300 border border-red-800 text-xs font-bold p-1.5 rounded-lg cursor-pointer transition-colors"
+                            title="Xóa bộ đề thi"
+                          >
+                            <Trash2 className="w-4 h-4 text-red-400" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Button: + Mục trong khung chương trình (Add Exam Set) */}
+                  <button
+                    onClick={handleAddExamSet}
+                    disabled={getCourseExamSets(selectedCourse).length >= 6}
+                    className="w-full sm:w-auto bg-purple-950/40 hover:bg-purple-900/60 border-2 border-purple-600/60 text-purple-300 font-bold text-xs px-5 py-2.5 rounded-xl flex items-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-all mt-2"
+                  >
+                    <Plus className="w-4 h-4 text-purple-400" />
+                    <span>+ Mục trong khung chương trình (Thêm bộ đề thi)</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* SCREENSHOT 2 VIEW: EXAM SET PLANNER & CONFIGURATION */
+              <div className="space-y-6">
+                {/* Back button link */}
+                <button
+                  onClick={() => setSelectedSetId(null)}
+                  className="inline-flex items-center gap-2 text-xs font-bold text-purple-400 hover:text-purple-300 cursor-pointer bg-slate-800 border border-slate-700 px-3.5 py-2 rounded-xl"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  <span>Quay lại chương trình giảng dạy</span>
+                </button>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* Left Column: Question List for this Set */}
+                  <div className="bg-slate-800 border border-slate-700 p-5 rounded-2xl space-y-4 lg:col-span-1">
+                    <div className="flex items-center justify-between border-b border-slate-700 pb-3">
+                      <div>
+                        <h3 className="font-display font-bold text-sm text-white flex items-center gap-2">
+                          <span>Câu hỏi</span>
+                          <span className="text-xs text-purple-300 font-mono">
+                            ({(getCourseExamSets(selectedCourse).find(s => s.id === selectedSetId)?.questions || []).length})
+                          </span>
+                        </h3>
+                      </div>
+
+                      <button
+                        onClick={handleOpenAddQuestion}
+                        className="w-7 h-7 bg-purple-600 hover:bg-purple-500 text-white rounded-full flex items-center justify-center cursor-pointer shadow-md"
+                        title="Thêm câu hỏi mới vào bộ đề này"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div className="space-y-2 max-h-[65vh] overflow-y-auto pr-1">
+                      {(getCourseExamSets(selectedCourse).find(s => s.id === selectedSetId)?.questions || []).length > 0 ? (
+                        (getCourseExamSets(selectedCourse).find(s => s.id === selectedSetId)?.questions || []).map((q, idx) => (
+                          <div
+                            key={q.id}
+                            onClick={() => handleOpenEditQuestion(q)}
+                            className="bg-slate-900 border border-slate-700 hover:border-purple-500/60 p-3 rounded-xl text-xs flex items-center justify-between gap-3 cursor-pointer group"
+                          >
+                            <p className="font-medium text-slate-300 group-hover:text-white line-clamp-2">
+                              {idx + 1}. {q.question}
+                            </p>
+                            <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                              <button
+                                onClick={() => handleOpenEditQuestion(q)}
+                                className="text-slate-400 hover:text-blue-400 p-1"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteQuestion(q.id)}
+                                className="text-slate-400 hover:text-red-400 p-1"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-center py-8 text-slate-500 text-xs italic space-y-2">
+                          <p>Chưa có câu hỏi nào trong bộ đề này.</p>
+                          <button
+                            onClick={handleOpenAddQuestion}
+                            className="text-purple-400 hover:underline font-bold"
+                          >
+                            + Thêm câu hỏi đầu tiên
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Right Column: Set Settings Form (Screenshot 2 Match) */}
+                  <div className="bg-slate-800 border border-slate-700 p-6 rounded-2xl space-y-5 lg:col-span-2">
+                    <h3 className="font-display font-extrabold text-base text-white border-b border-slate-700 pb-3">
+                      Lập kế hoạch cho bài kiểm tra thực hành
+                    </h3>
+
+                    <div className="space-y-4">
+                      {/* Tiêu đề */}
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-slate-300">Tiêu đề</label>
+                        <input
+                          type="text"
+                          required
+                          value={setFormTitle}
+                          onChange={(e) => setSetFormTitle(e.target.value)}
+                          placeholder="e.g. Dump 06"
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-white outline-none focus:border-purple-500 font-bold"
+                        />
+                      </div>
+
+                      {/* Mô tả */}
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
+                          <span>Mô tả</span>
+                          <span className="text-[10px] text-slate-500">Không bắt buộc</span>
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={setFormDesc}
+                          onChange={(e) => setSetFormDesc(e.target.value)}
+                          placeholder="Mô tả bài kiểm tra thực hành này cho học viên..."
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-slate-200 outline-none focus:border-purple-500 leading-relaxed"
+                        />
+                      </div>
+
+                      {/* Thời lượng & Điểm đạt */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold text-slate-300">Thời lượng (phút)</label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="300"
+                            required
+                            value={setFormDuration}
+                            onChange={(e) => setSetFormDuration(Number(e.target.value))}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-white font-mono font-bold outline-none focus:border-purple-500"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold text-slate-300">Điểm đạt tối thiểu (%)</label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="100"
+                            required
+                            value={setFormPassing}
+                            onChange={(e) => setSetFormPassing(Number(e.target.value))}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-emerald-400 font-mono font-bold outline-none focus:border-purple-500"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Sắp xếp ngẫu nhiên câu hỏi & câu trả lời */}
+                      <div className="flex items-center justify-between bg-slate-900 border border-slate-700 p-4 rounded-xl">
+                        <div>
+                          <span className="text-xs font-bold text-white block">
+                            Sắp xếp ngẫu nhiên thứ tự câu hỏi và câu trả lời
+                          </span>
+                          <span className="text-[11px] text-slate-400">
+                            Xáo trộn câu hỏi mỗi lần học viên bắt đầu làm đề thi.
+                          </span>
+                        </div>
+
+                        <input
+                          type="checkbox"
+                          checked={setFormRandomize}
+                          onChange={(e) => setSetFormRandomize(e.target.checked)}
+                          className="w-5 h-5 accent-purple-600 rounded cursor-pointer shrink-0"
+                        />
+                      </div>
+
+                      {/* Nút Lưu */}
+                      <div className="pt-3">
                         <button
-                          onClick={() => handleDeleteQuestion(q.id)}
-                          className="text-red-400 hover:text-red-200 p-1.5 hover:bg-slate-800 rounded-lg"
+                          type="button"
+                          onClick={handleSaveSetSettings}
+                          className="bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs px-8 py-3 rounded-xl shadow-lg transition-all cursor-pointer"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          Lưu
                         </button>
                       </div>
                     </div>
-                  ))
-                ) : (
-                  <p className="text-xs text-slate-500 italic text-center py-8">
-                    No questions found in this course bank.
-                  </p>
-                )}
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
 
@@ -1550,17 +1906,17 @@ export default function AdminDashboard({
                         type="password"
                         value={gmailAppPassword}
                         onChange={(e) => setGmailAppPassword(e.target.value)}
-                        placeholder="xxxx xxxx xxxx xxxx"
+                        placeholder="e.g. abcd efgh ijkl mnop"
                         className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white font-mono outline-none focus:border-blue-500"
                       />
                     </div>
                     <button
                       type="button"
-                      onClick={handleTestEmail}
+                      onClick={handleTestGmail}
                       disabled={testingEmail}
-                      className="bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white font-bold text-xs py-2 px-4 rounded-xl flex items-center gap-2 transition-colors cursor-pointer"
+                      className="w-full bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold py-2.5 rounded-xl cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
                     >
-                      <Send className="w-4 h-4 text-blue-400" />
+                      <Send className="w-3.5 h-3.5 text-blue-400" />
                       <span>{testingEmail ? 'Sending...' : 'Test Gmail Alert'}</span>
                     </button>
                   </div>
@@ -1568,35 +1924,36 @@ export default function AdminDashboard({
                   {/* Telegram Settings */}
                   <div className="bg-slate-900 p-5 rounded-2xl border border-slate-700 space-y-4">
                     <h3 className="font-display font-bold text-sm text-white flex items-center gap-2">
-                      <BellRing className="w-4 h-4 text-blue-400" /> Telegram Bot Configuration
+                      <Send className="w-4 h-4 text-blue-400" /> Telegram Bot Configuration
                     </h3>
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-300">Telegram Bot Token</label>
+                      <label className="text-xs font-bold text-slate-300">Bot Token</label>
                       <input
-                        type="password"
+                        type="text"
                         value={telegramBotToken}
                         onChange={(e) => setTelegramBotToken(e.target.value)}
-                        placeholder="123456789:ABCdef..."
+                        placeholder="e.g. 123456789:ABCdefGHIjklMNO..."
                         className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white font-mono outline-none focus:border-blue-500"
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-300">Telegram Chat ID</label>
+                      <label className="text-xs font-bold text-slate-300">Chat ID</label>
                       <input
                         type="text"
                         value={telegramChatId}
                         onChange={(e) => setTelegramChatId(e.target.value)}
-                        placeholder="987654321"
+                        placeholder="e.g. 987654321"
                         className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white font-mono outline-none focus:border-blue-500"
                       />
                     </div>
+
                     <button
                       type="button"
                       onClick={handleTestTelegram}
                       disabled={testingTelegram}
-                      className="bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white font-bold text-xs py-2 px-4 rounded-xl flex items-center gap-2 transition-colors cursor-pointer"
+                      className="w-full bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold py-2.5 rounded-xl cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
                     >
-                      <Send className="w-4 h-4 text-blue-400" />
+                      <Send className="w-3.5 h-3.5 text-blue-400" />
                       <span>{testingTelegram ? 'Sending...' : 'Test Telegram Alert'}</span>
                     </button>
                   </div>
@@ -1624,18 +1981,59 @@ export default function AdminDashboard({
                 <AlertTriangle className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="font-display font-bold text-base text-white">Confirm Question Bank Replacement</h3>
+                <h3 className="font-display font-bold text-base text-white">Import CSV & Re-populate Exam Sets</h3>
                 <p className="text-xs text-slate-400">Course: <span className="text-blue-300 font-bold">{selectedCourse.title}</span></p>
               </div>
             </div>
 
-            <div className="bg-slate-900 border border-slate-700/80 p-4 rounded-2xl text-xs text-slate-300 space-y-2 leading-relaxed">
-              <p className="font-bold text-amber-300 flex items-center gap-1.5">
-                ⚠️ Warning: Existing Question Bank Will Be Deleted & Replaced
-              </p>
-              <p>
-                Proceeding with CSV import will <strong className="text-white">DELETE ALL {selectedCourse.mockExam?.length || 0} existing questions</strong> for this course and populate it with fresh questions from your CSV file.
-              </p>
+            <div className="space-y-3 text-xs">
+              <label className="font-bold text-slate-300 block">Chọn chế độ Import CSV:</label>
+
+              <div
+                onClick={() => setCsvImportMode('replace_all')}
+                className={`p-3.5 rounded-xl border-2 cursor-pointer transition-all flex items-start gap-3 ${
+                  csvImportMode === 'replace_all'
+                    ? 'bg-purple-950/50 border-purple-500 text-purple-200 font-bold'
+                    : 'bg-slate-900 border-slate-700 text-slate-400'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="import_mode"
+                  checked={csvImportMode === 'replace_all'}
+                  onChange={() => setCsvImportMode('replace_all')}
+                  className="mt-0.5 accent-purple-600 cursor-pointer"
+                />
+                <div>
+                  <span className="text-white font-bold block">Replace hàng loạt toàn bộ bộ đề cũ</span>
+                  <span className="text-[11px] font-normal text-slate-400">
+                    Xóa sạch toàn bộ các bộ đề cũ của khóa học này và thay bằng bộ đề thi mới từ file CSV.
+                  </span>
+                </div>
+              </div>
+
+              <div
+                onClick={() => setCsvImportMode('target_set')}
+                className={`p-3.5 rounded-xl border-2 cursor-pointer transition-all flex items-start gap-3 ${
+                  csvImportMode === 'target_set'
+                    ? 'bg-purple-950/50 border-purple-500 text-purple-200 font-bold'
+                    : 'bg-slate-900 border-slate-700 text-slate-400'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="import_mode"
+                  checked={csvImportMode === 'target_set'}
+                  onChange={() => setCsvImportMode('target_set')}
+                  className="mt-0.5 accent-purple-600 cursor-pointer"
+                />
+                <div>
+                  <span className="text-white font-bold block">Import vào bộ đề hiện tại</span>
+                  <span className="text-[11px] font-normal text-slate-400">
+                    Cập nhật danh sách câu hỏi vào bộ đề thi đang chọn ({selectedSetId ? setFormTitle : 'Dump 01'}).
+                  </span>
+                </div>
+              </div>
             </div>
 
             <div className="flex justify-end gap-3 pt-2">
@@ -1644,7 +2042,7 @@ export default function AdminDashboard({
                 onClick={() => setIsConfirmImportOpen(false)}
                 className="bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold px-4 py-2.5 rounded-xl text-xs cursor-pointer"
               >
-                Cancel
+                Hủy
               </button>
               <button
                 type="button"
@@ -1656,7 +2054,7 @@ export default function AdminDashboard({
                 }}
                 className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-5 py-2.5 rounded-xl text-xs shadow-lg flex items-center gap-2 cursor-pointer"
               >
-                <Upload className="w-4 h-4" /> Yes, Proceed & Choose CSV File
+                <Upload className="w-4 h-4" /> Chọn file CSV & Tiến hành Import
               </button>
             </div>
           </div>

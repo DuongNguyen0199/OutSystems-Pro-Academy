@@ -80,6 +80,11 @@ export default function CourseCard({
                   {tag.text}
                 </span>
               ))}
+              {course.examSets && course.examSets.length > 0 && (
+                <span className="text-[10px] md:text-xs font-bold px-2 py-0.5 rounded-md tracking-wider bg-purple-50 text-purple-700 border border-purple-200">
+                  {course.examSets.length} Dumps
+                </span>
+              )}
             </div>
 
             <p className="text-slate-500 text-xs md:text-sm mt-3 leading-relaxed font-medium">

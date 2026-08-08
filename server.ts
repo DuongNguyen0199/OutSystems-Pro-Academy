@@ -73,6 +73,7 @@ function resolveCourseUuid(cId: string): string {
 
 // In-Memory Fallbacks for runtime session state
 let inMemoryCourseQuestions: Record<string, any[]> = {};
+let inMemoryCourseExamSets: Record<string, any[]> = {};
 let memoryUsers: any[] = [
   {
     id: "usr_admin_01",
@@ -187,6 +188,18 @@ app.get("/api/courses", async (req, res) => {
         }
       }
 
+      const sets = inMemoryCourseExamSets[item.id] || inMemoryCourseExamSets[targetUuid] || [
+        {
+          id: 'set-1',
+          title: 'Dump 01',
+          description: 'Bài kiểm tra thực hành Dump 01',
+          durationMinutes: 90,
+          passingScorePct: 70,
+          randomizeQuestions: false,
+          questions: mockExam
+        }
+      ];
+
       return {
         id: item.id,
         title: item.title,
@@ -195,7 +208,8 @@ app.get("/api/courses", async (req, res) => {
         imageUrl: imageUrl,
         tags: tags,
         previewQuestions: fallback ? fallback.previewQuestions : [],
-        mockExam: mockExam
+        mockExam: mockExam,
+        examSets: sets
       };
     });
 
@@ -703,6 +717,29 @@ app.post("/api/admin/questions/import", requireAdminAuth, async (req, res) => {
   } catch (err: any) {
     console.error("Save questions error:", err);
     res.status(500).json({ success: false, error: err.message || "Failed to save questions to database." });
+  }
+});
+
+// SAVE EXAM SETS & CONFIGURATION ENDPOINT
+app.post("/api/admin/courses/sets/update", requireAdminAuth, async (req, res) => {
+  try {
+    const { courseId, examSets } = req.body;
+    if (!courseId || !Array.isArray(examSets)) {
+      return res.status(400).json({ success: false, error: "Invalid payload." });
+    }
+
+    const targetUuid = resolveCourseUuid(courseId);
+    inMemoryCourseExamSets[courseId] = examSets;
+    inMemoryCourseExamSets[targetUuid] = examSets;
+
+    // Combine questions across all sets for backward compatibility
+    const allQuestions = examSets.flatMap(s => s.questions || []);
+    inMemoryCourseQuestions[courseId] = allQuestions;
+    inMemoryCourseQuestions[targetUuid] = allQuestions;
+
+    res.json({ success: true, message: `Successfully saved ${examSets.length} exam set(s) for course!` });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || "Failed to update exam sets." });
   }
 });
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Course, MockExamQuestion } from '../types';
+import { Course, MockExamQuestion, ExamSet } from '../types';
 import {
   Clock,
   Flag,
@@ -13,7 +13,9 @@ import {
   FileText,
   Check,
   Settings,
-  Grid
+  Grid,
+  BookOpen,
+  ArrowRight
 } from 'lucide-react';
 
 interface UdemyMockExamProps {
@@ -22,30 +24,38 @@ interface UdemyMockExamProps {
 }
 
 export default function UdemyMockExam({ course, onClose }: UdemyMockExamProps) {
-  const questions: MockExamQuestion[] = course.mockExam && course.mockExam.length > 0
-    ? course.mockExam
+  const defaultSets: ExamSet[] = (course.examSets && course.examSets.length > 0)
+    ? course.examSets
     : [
         {
-          id: 'q1',
-          question: 'In OutSystems Reactive Web Apps, which lifecycle event is triggered before the screen is rendered and before any data aggregates begin fetching?',
-          choices: [
-            { key: 'A', text: 'On Render' },
-            { key: 'B', text: 'On Initialize' },
-            { key: 'C', text: 'On Ready' },
-            { key: 'D', text: 'On Destroy' }
-          ],
-          correctAnswer: 'B',
-          explanation: 'On Initialize is the first screen lifecycle event. It executes before screen rendering and before data aggregates start fetching, making it ideal for setting up initial local variables.'
+          id: 'set-1',
+          title: 'Dump 01',
+          description: 'Bài kiểm tra thực hành Dump 01',
+          durationMinutes: 90,
+          passingScorePct: 70,
+          randomizeQuestions: false,
+          questions: course.mockExam || []
         }
       ];
 
-  // Exam Phases: 'confirm_details' -> 'intro' -> 'exam' -> 'result'
-  const [examPhase, setExamPhase] = useState<'confirm_details' | 'intro' | 'exam' | 'result'>('confirm_details');
+  const [selectedSet, setSelectedSet] = useState<ExamSet>(defaultSets[0]);
+
+  // Exam Phases: 'select_set' -> 'confirm_details' -> 'intro' -> 'exam' -> 'result'
+  const [examPhase, setExamPhase] = useState<'select_set' | 'confirm_details' | 'intro' | 'exam' | 'result'>(
+    defaultSets.length > 1 ? 'select_set' : 'confirm_details'
+  );
+
+  const questions: MockExamQuestion[] = selectedSet.questions && selectedSet.questions.length > 0
+    ? selectedSet.questions
+    : (course.mockExam || []);
+
+  const durationSecs = (selectedSet.durationMinutes || 90) * 60;
+  const passingPctThreshold = selectedSet.passingScorePct || 70;
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, string>>({});
   const [flaggedQuestions, setFlaggedQuestions] = useState<Record<number, boolean>>({});
-  const [timeLeft, setTimeLeft] = useState<number>(questions.length * 90); // 90s per question
+  const [timeLeft, setTimeLeft] = useState<number>(durationSecs);
   const [introTimeLeft, setIntroTimeLeft] = useState<number>(15 * 60); // 15 mins for intro
   const [isSubmitted, setIsSubmitted] = useState<boolean>(false);
   const [showConfirmFinishModal, setShowConfirmFinishModal] = useState<boolean>(false);
@@ -61,6 +71,11 @@ export default function UdemyMockExam({ course, onClose }: UdemyMockExamProps) {
       if (u.email) candidateEmail = u.email;
     } catch (e) {}
   }
+
+  // Update timer when set changes
+  useEffect(() => {
+    setTimeLeft((selectedSet.durationMinutes || 90) * 60);
+  }, [selectedSet]);
 
   // AI Tutor explanations
   const [aiExplanations, setAiExplanations] = useState<Record<number, string>>({});
@@ -122,8 +137,8 @@ export default function UdemyMockExam({ course, onClose }: UdemyMockExamProps) {
         correctCount++;
       }
     });
-    const scorePct = Math.round((correctCount / questions.length) * 100);
-    const passed = scorePct >= 70;
+    const scorePct = Math.round((correctCount / (questions.length || 1)) * 100);
+    const passed = scorePct >= passingPctThreshold;
     return { correctCount, total: questions.length, scorePct, passed };
   };
 
@@ -162,6 +177,79 @@ export default function UdemyMockExam({ course, onClose }: UdemyMockExamProps) {
       setLoadingAi((prev) => ({ ...prev, [qIndex]: false }));
     }
   };
+
+  // --------------------------------------------------------------------------
+  // PHASE 0: SELECT PRACTICE TEST SET SCREEN (Dump 01 - Dump 06)
+  // --------------------------------------------------------------------------
+  if (examPhase === 'select_set') {
+    return (
+      <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-4 font-sans select-none">
+        <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-200">
+          <div className="bg-[#444444] text-white p-6 flex items-center justify-between">
+            <div>
+              <span className="font-mono text-xs font-bold text-[#76b82a] uppercase tracking-widest block mb-1">
+                SELECT PRACTICE TEST SET
+              </span>
+              <h2 className="font-display font-extrabold text-xl text-white">
+                {course.title}
+              </h2>
+            </div>
+            <button
+              onClick={onClose}
+              className="text-slate-400 hover:text-white p-1.5 rounded-full hover:bg-slate-700 transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+            <p className="text-xs text-slate-600 font-medium">
+              Khóa học này có <strong>{defaultSets.length} bộ đề thi thực hành</strong>. Vui lòng chọn bộ đề bạn muốn thực hành:
+            </p>
+
+            <div className="space-y-3">
+              {defaultSets.map((s, idx) => (
+                <div
+                  key={s.id || idx}
+                  onClick={() => {
+                    setSelectedSet(s);
+                    setExamPhase('confirm_details');
+                  }}
+                  className="bg-slate-50 hover:bg-lime-50 border-2 border-slate-200 hover:border-[#76b82a] p-4 rounded-xl flex items-center justify-between gap-4 transition-all cursor-pointer group shadow-xs"
+                >
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-slate-900 text-white font-extrabold text-xs flex items-center justify-center font-mono group-hover:bg-[#76b82a] transition-colors">
+                      0{idx + 1}
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-slate-900 text-sm group-hover:text-[#68a424]">
+                        Bài kiểm tra thực hành {idx + 1}: {s.title}
+                      </h4>
+                      <p className="text-xs text-slate-500 line-clamp-1 mt-0.5">
+                        {s.description || `Bộ đề thi mô phỏng ${s.title}`}
+                      </p>
+                      <div className="flex items-center gap-3 text-[11px] font-mono text-slate-400 mt-1">
+                        <span>{s.questions?.length || 0} câu hỏi</span>
+                        <span>•</span>
+                        <span>{s.durationMinutes || 90} phút</span>
+                        <span>•</span>
+                        <span>Đạt {s.passingScorePct || 70}%</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button className="bg-[#76b82a] group-hover:bg-[#68a424] text-white font-bold px-4 py-2 rounded-lg text-xs flex items-center gap-1.5 shadow-sm shrink-0 cursor-pointer">
+                    <span>Vào Thi</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const progressPercentage = Math.round((Object.keys(selectedAnswers).length / questions.length) * 100);
 

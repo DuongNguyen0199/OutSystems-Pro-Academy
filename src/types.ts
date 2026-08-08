@@ -19,6 +19,16 @@ export interface MockExamQuestion {
   imageUrl?: string;
 }
 
+export interface ExamSet {
+  id: string;
+  title: string;
+  description?: string;
+  durationMinutes: number;
+  passingScorePct: number;
+  randomizeQuestions?: boolean;
+  questions: MockExamQuestion[];
+}
+
 export interface Course {
   id: string;
   title: string;
@@ -29,6 +39,7 @@ export interface Course {
   imageUrl: string;
   previewQuestions: Question[];
   mockExam: MockExamQuestion[];
+  examSets?: ExamSet[];
 }
 
 export interface UserProfile {
