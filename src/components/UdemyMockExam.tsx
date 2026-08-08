@@ -609,29 +609,27 @@ export default function UdemyMockExam({ course, onClose }: UdemyMockExamProps) {
                   );
                 }
 
-                // Normal / Unselected Question: Dark Slate Tab with Top-Left Dog-Ear Fold (Image 2 #1 - #9)
+                // Normal / Unselected Question: Dark Slate Tab with Top-Left Dog-Ear Fold (Image 2 & 3 Match)
                 return (
                   <button
                     key={q.id || idx}
                     onClick={() => setCurrentIndex(idx)}
-                    className={`w-[88%] h-8 rounded-r-md relative flex items-center justify-center font-bold text-xs cursor-pointer shrink-0 transition-all shadow-xs ${
-                      isFlagged
-                        ? 'bg-[#35454e] text-amber-300 hover:bg-[#435560]'
-                        : isAnswered
-                        ? 'bg-[#35454e] text-emerald-300 hover:bg-[#435560]'
-                        : 'bg-[#35454e] text-white hover:bg-[#435560]'
+                    className={`w-[88%] h-8 rounded-r-md relative flex items-center justify-center font-extrabold text-xs cursor-pointer shrink-0 transition-all shadow-xs ${
+                      isAnswered
+                        ? 'bg-[#35454e] text-slate-200 hover:bg-[#435560]'
+                        : 'bg-[#76b82a] text-white hover:bg-[#68a424]'
                     }`}
-                    title={`Question ${qNum}${isAnswered ? ' (Answered)' : ''}${isFlagged ? ' (Flagged)' : ''}`}
+                    title={`Question ${qNum}${isAnswered ? ' (Answered)' : ' (Unanswered)'}${isFlagged ? ' (Flagged)' : ''}`}
                   >
-                    {/* Top-Left Folded Paper Corner (Dog-Ear effect matching Image 2) */}
+                    {/* Top-Left Folded Paper Corner (Dog-Ear effect matching Image 3) */}
                     <div 
-                      className={`absolute top-0 left-0 w-2.5 h-2.5 ${
-                        isFlagged ? 'bg-amber-400' : isAnswered ? 'bg-[#76b82a]' : 'bg-[#a2b2bc]'
+                      className={`absolute top-0 left-0 w-3 h-3 ${
+                        isFlagged ? 'bg-amber-400' : isAnswered ? 'bg-[#9ab0bd]' : 'bg-[#c5db9a]'
                       }`}
                       style={{ clipPath: 'polygon(0 0, 100% 100%, 0 100%)' }}
                     />
 
-                    <span className="font-mono text-xs pl-1 font-bold">{qNum}</span>
+                    <span className="font-mono text-xs pl-1 font-extrabold">{qNum}</span>
 
                     {isFlagged && (
                       <Flag className="w-2.5 h-2.5 text-amber-300 fill-amber-300 absolute bottom-1 right-1" />
