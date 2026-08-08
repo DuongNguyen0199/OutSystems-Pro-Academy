@@ -2,20 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { Course, MockExamQuestion } from '../types';
 import {
   Clock,
-  ArrowLeft,
-  ArrowRight,
   Flag,
   CheckCircle,
   XCircle,
-  RotateCcw,
   Sparkles,
   HelpCircle,
   Award,
   AlertCircle,
-  Menu,
   X,
   FileText,
-  Image as ImageIcon,
   Check,
   Settings,
   Grid
@@ -59,7 +54,7 @@ export default function UdemyMockExam({ course, onClose }: UdemyMockExamProps) {
 
   // User candidate info
   const savedUserStr = localStorage.getItem('outsystems_user');
-  let candidateEmail = 'USER Demo';
+  let candidateEmail = 'CFAlanren';
   if (savedUserStr) {
     try {
       const u = JSON.parse(savedUserStr);
@@ -168,17 +163,19 @@ export default function UdemyMockExam({ course, onClose }: UdemyMockExamProps) {
     }
   };
 
+  const progressPercentage = Math.round((Object.keys(selectedAnswers).length / questions.length) * 100);
+
   // --------------------------------------------------------------------------
   // PHASE 1: CONFIRM DETAILS SCREEN (Prometric Screenshot 3)
   // --------------------------------------------------------------------------
   if (examPhase === 'confirm_details') {
     return (
-      <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg w-full max-w-xl shadow-2xl overflow-hidden border border-slate-300">
+      <div className="fixed inset-0 bg-[#c5d1d6] z-50 flex items-center justify-center p-4 font-sans select-none">
+        <div className="bg-white rounded w-full max-w-xl shadow-2xl overflow-hidden border-2 border-slate-400">
           {/* Header */}
-          <div className="bg-slate-800 text-white px-5 py-3 flex items-center justify-between font-mono text-sm">
+          <div className="bg-[#444444] text-white px-5 py-3 flex items-center justify-between font-mono text-sm border-b border-slate-600">
             <span className="font-bold">Confirm Details</span>
-            <span className="flex items-center gap-1.5 text-amber-400 font-extrabold">
+            <span className="flex items-center gap-1.5 text-amber-300 font-extrabold">
               <Clock className="w-4 h-4" /> 00:02:00
             </span>
           </div>
@@ -187,7 +184,7 @@ export default function UdemyMockExam({ course, onClose }: UdemyMockExamProps) {
             {/* Prometric Header Logos */}
             <div className="flex items-center justify-between border-b border-slate-200 pb-5">
               <div className="flex items-center gap-2">
-                <div className="w-9 h-9 bg-blue-600 text-white rounded-lg flex items-center justify-center font-extrabold text-sm shadow">
+                <div className="w-9 h-9 bg-blue-600 text-white rounded flex items-center justify-center font-extrabold text-sm shadow">
                   OS
                 </div>
                 <div>
@@ -196,13 +193,13 @@ export default function UdemyMockExam({ course, onClose }: UdemyMockExamProps) {
                 </div>
               </div>
               <div className="text-right">
-                <span className="font-display font-black text-lime-700 tracking-widest text-lg">PROMETRIC</span>
+                <span className="font-display font-black text-[#76b82a] tracking-widest text-lg block">PROMETRIC</span>
                 <p className="text-[10px] text-slate-400 font-mono">TESTING CENTER SIMULATION</p>
               </div>
             </div>
 
             {/* Candidate Box */}
-            <div className="bg-slate-50 border border-slate-200 rounded-lg p-6 space-y-3 font-mono text-xs text-slate-700">
+            <div className="bg-slate-50 border border-slate-300 rounded p-6 space-y-3 font-mono text-xs text-slate-800">
               <div className="grid grid-cols-3 gap-2">
                 <span className="text-slate-500 font-medium">Candidate Email:</span>
                 <span className="col-span-2 font-bold text-slate-900">{candidateEmail}</span>
@@ -231,13 +228,13 @@ export default function UdemyMockExam({ course, onClose }: UdemyMockExamProps) {
               <div className="flex items-center justify-center gap-4">
                 <button
                   onClick={() => setExamPhase('intro')}
-                  className="bg-lime-600 hover:bg-lime-500 text-white font-bold px-8 py-2.5 rounded shadow transition-all flex items-center gap-2 cursor-pointer text-sm"
+                  className="bg-[#76b82a] hover:bg-[#68a424] text-white font-bold px-8 py-2.5 rounded shadow transition-all flex items-center gap-2 cursor-pointer text-sm"
                 >
                   <Check className="w-4 h-4" /> Confirm
                 </button>
                 <button
                   onClick={onClose}
-                  className="bg-lime-600 hover:bg-lime-500 text-white font-bold px-8 py-2.5 rounded shadow transition-all flex items-center gap-2 cursor-pointer text-sm"
+                  className="bg-[#76b82a] hover:bg-[#68a424] text-white font-bold px-8 py-2.5 rounded shadow transition-all flex items-center gap-2 cursor-pointer text-sm"
                 >
                   <X className="w-4 h-4" /> Cancel
                 </button>
@@ -254,422 +251,433 @@ export default function UdemyMockExam({ course, onClose }: UdemyMockExamProps) {
   // --------------------------------------------------------------------------
   if (examPhase === 'intro') {
     return (
-      <div className="fixed inset-0 bg-slate-200 z-50 flex flex-col font-sans select-none">
-        {/* Top Header Bar */}
-        <header className="bg-slate-800 text-white px-4 py-2.5 flex items-center justify-between text-xs font-mono border-b border-slate-900 shadow">
-          <div>
-            <span className="font-bold">Page: 1</span>
-            <span className="mx-2 text-slate-500">|</span>
-            <span>Section: Introduction</span>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4 text-amber-400" />
-              <span>Introduction Time Remaining: {formatTime(introTimeLeft)}</span>
+      <div className="fixed inset-0 bg-[#c5d1d6] z-50 flex items-center justify-center p-3 font-sans select-none">
+        <div className="w-full max-w-[1280px] h-[95vh] bg-white border-2 border-slate-400 rounded shadow-2xl flex flex-col overflow-hidden">
+          {/* Top Header Bar */}
+          <header className="bg-[#444444] text-white px-4 py-2.5 flex items-center justify-between text-xs font-mono border-b border-slate-700 shadow">
+            <div>
+              <span className="font-bold">Page: 1</span>
+              <span className="mx-2 text-slate-400">|</span>
+              <span>Section: Introduction</span>
             </div>
-            <div className="bg-slate-700 rounded-full h-3 w-32 overflow-hidden border border-slate-600">
-              <div className="bg-lime-500 h-full w-[10%]" />
-            </div>
-            <span className="text-[11px] text-slate-400">Progress 0%</span>
-          </div>
 
-          <button
-            onClick={() => setExamPhase('exam')}
-            className="bg-amber-200 hover:bg-amber-300 text-slate-950 font-bold px-4 py-1 rounded border-2 border-slate-900 shadow text-xs cursor-pointer"
-          >
-            Finish Test
-          </button>
-        </header>
-
-        {/* Sub Header Green Bar */}
-        <div className="bg-lime-600 text-white px-4 py-2 flex items-center justify-between text-xs font-bold shadow-sm">
-          <span>Test: {course.title} Exam Simulation</span>
-          <span>Candidate: {candidateEmail}</span>
-        </div>
-
-        {/* Main Content Body */}
-        <div className="flex-1 flex overflow-hidden p-3 gap-3">
-          {/* Left Vertical Section Tabs */}
-          <div className="w-14 flex flex-col gap-1 overflow-y-auto pr-1">
-            {Array.from({ length: Math.min(16, questions.length) }).map((_, i) => (
-              <div
-                key={i}
-                className={`py-2 px-1 text-center font-extrabold text-xs text-white rounded-l relative flex items-center justify-center ${
-                  i === 0 ? 'bg-lime-600 shadow' : 'bg-lime-700/80 hover:bg-lime-600'
-                }`}
-              >
-                <span>{i + 1}</span>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-amber-300" />
+                <span>Introduction Time Remaining: {formatTime(introTimeLeft)}</span>
               </div>
-            ))}
+              <div className="bg-slate-600 rounded-full h-2.5 w-32 overflow-hidden border border-slate-500">
+                <div className="bg-[#76b82a] h-full w-[10%]" />
+              </div>
+              <span className="text-[11px] text-slate-300">Progress 0%</span>
+            </div>
+
+            <button
+              onClick={() => setExamPhase('exam')}
+              className="bg-[#76b82a] hover:bg-[#68a424] text-white font-bold px-5 py-1.5 rounded shadow text-xs cursor-pointer"
+            >
+              Finish Test
+            </button>
+          </header>
+
+          {/* Sub Header Green Bar */}
+          <div className="bg-[#76b82a] text-white px-4 py-1.5 flex items-center justify-between text-xs font-bold shadow-sm">
+            <span>Test: {course.title} Exam Simulation</span>
+            <span>Candidate: {candidateEmail}</span>
           </div>
 
-          {/* Center Main Introduction White Container */}
-          <div className="flex-1 bg-white border border-slate-300 rounded p-8 overflow-y-auto space-y-6 text-slate-800 text-xs leading-relaxed shadow-sm">
-            <h2 className="font-display font-extrabold text-lg text-slate-900 border-b pb-3">
-              {course.title} — Exam Simulation
-            </h2>
+          {/* Main Content Body */}
+          <div className="flex-1 flex overflow-hidden p-3 gap-3 bg-[#ffffff]">
+            {/* Left Vertical Section Tabs */}
+            <div className="w-16 flex flex-col gap-1 overflow-y-auto pr-1">
+              {Array.from({ length: Math.min(24, questions.length) }).map((_, i) => (
+                <div
+                  key={i}
+                  className={`py-1.5 px-1 text-center font-extrabold text-xs text-white rounded-l flex items-center justify-center ${
+                    i === 0 ? 'bg-[#444444] shadow' : 'bg-[#76b82a] hover:bg-[#68a424]'
+                  }`}
+                >
+                  <span>{i + 1}</span>
+                </div>
+              ))}
+            </div>
 
-            <div className="space-y-2">
-              <h3 className="font-bold text-slate-900 text-sm">Exam Structure</h3>
-              <p>
-                This official OutSystems certification simulation exam contains <strong>{questions.length} multiple-choice questions</strong>. You will have <strong>{Math.round((questions.length * 90) / 60)} minutes</strong> to complete the exam.
+            {/* Center Main Introduction White Container */}
+            <div className="flex-1 bg-white border border-slate-300 rounded p-8 overflow-y-auto space-y-6 text-slate-800 text-xs leading-relaxed shadow-xs">
+              <h2 className="font-display font-extrabold text-lg text-slate-900 border-b pb-3">
+                {course.title} — Exam Simulation
+              </h2>
+
+              <div className="space-y-2">
+                <h3 className="font-bold text-slate-900 text-sm">Exam Structure</h3>
+                <p>
+                  This official OutSystems certification simulation exam contains <strong>{questions.length} multiple-choice questions</strong>. You will have <strong>{Math.round((questions.length * 90) / 60)} minutes</strong> to complete the exam.
+                </p>
+              </div>
+
+              <div className="space-y-2 bg-slate-50 border border-slate-200 p-4 rounded">
+                <h3 className="font-bold text-slate-900 text-sm">Exam Instructions & Passing Criteria</h3>
+                <ul className="list-disc list-inside space-y-1.5 text-slate-700">
+                  <li>You must answer at least <strong>70% of the questions correctly</strong> to earn your certification badge.</li>
+                  <li>Read each question carefully and select choices <strong>A, B, C, or D</strong>.</li>
+                  <li>You can flag any questions for review using the <strong>Flag Question</strong> button at the bottom right.</li>
+                  <li>Use the left navigation bar or the <strong>Next / Previous</strong> buttons to navigate between questions.</li>
+                  <li>Click <strong>Finish Test</strong> at the top right or bottom right when you are ready to submit your answers.</li>
+                </ul>
+              </div>
+
+              <p className="text-slate-500 italic pt-4">
+                Note: This simulation environment reproduces the exact Prometric Testing Center interface used for official OutSystems certification exams worldwide.
               </p>
             </div>
+          </div>
 
-            <div className="space-y-2 bg-slate-50 border border-slate-200 p-4 rounded">
-              <h3 className="font-bold text-slate-900 text-sm">Exam Instructions & Passing Criteria</h3>
-              <ul className="list-disc list-inside space-y-1.5 text-slate-700">
-                <li>You must answer at least <strong>70% of the questions correctly</strong> to earn your certification badge.</li>
-                <li>Read each question carefully and select choices <strong>A, B, C, or D</strong>.</li>
-                <li>You can flag any questions for review using the <strong>Flag Question</strong> button at the bottom right.</li>
-                <li>Use the left navigation bar or the <strong>Next / Previous</strong> buttons to navigate between questions.</li>
-                <li>Click <strong>Finish Test</strong> at the top right or bottom right when you are ready to submit your answers.</li>
-              </ul>
+          {/* Bottom Navigation Footer Bar */}
+          <footer className="bg-[#444444] text-white px-4 py-2.5 flex items-center justify-between border-t border-slate-600 text-xs">
+            <div className="flex items-center gap-3">
+              <button className="p-1.5 hover:bg-slate-700 rounded text-slate-200 cursor-pointer" title="Settings">
+                <Settings className="w-4 h-4" />
+              </button>
+              <button className="p-1.5 hover:bg-slate-700 rounded text-slate-200 cursor-pointer" title="Question Matrix Grid">
+                <Grid className="w-4 h-4" />
+              </button>
+              <button className="p-1.5 hover:bg-slate-700 rounded text-slate-200 cursor-pointer" title="Help Instructions">
+                <HelpCircle className="w-4 h-4" />
+              </button>
             </div>
 
-            <p className="text-slate-500 italic pt-4">
-              Note: This simulation environment reproduces the exact Prometric Testing Center interface used for official OutSystems certification exams worldwide.
-            </p>
-          </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setExamPhase('confirm_details')}
+                className="bg-[#76b82a] hover:bg-[#68a424] text-white font-bold px-4 py-1.5 rounded text-xs cursor-pointer flex items-center gap-1"
+              >
+                &lt; Back
+              </button>
+              <button
+                onClick={() => setExamPhase('exam')}
+                className="bg-[#76b82a] hover:bg-[#68a424] text-white font-bold px-4 py-1.5 rounded text-xs cursor-pointer flex items-center gap-1"
+              >
+                Next &gt;
+              </button>
+              <button
+                onClick={() => setExamPhase('exam')}
+                className="bg-[#76b82a] hover:bg-[#68a424] text-white font-extrabold px-6 py-1.5 rounded shadow text-xs cursor-pointer flex items-center gap-1"
+              >
+                Start the Test &gt;
+              </button>
+            </div>
+          </footer>
         </div>
-
-        {/* Bottom Navigation Footer Bar */}
-        <footer className="bg-slate-900 text-white px-4 py-2.5 flex items-center justify-between border-t-2 border-lime-600 text-xs">
-          <div className="flex items-center gap-3">
-            <button className="p-1.5 hover:bg-slate-800 rounded text-slate-300" title="Settings">
-              <Settings className="w-4 h-4" />
-            </button>
-            <button className="p-1.5 hover:bg-slate-800 rounded text-slate-300" title="Question Matrix Grid">
-              <Grid className="w-4 h-4" />
-            </button>
-            <button className="p-1.5 hover:bg-slate-800 rounded text-slate-300" title="Help Instructions">
-              <HelpCircle className="w-4 h-4" />
-            </button>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setExamPhase('confirm_details')}
-              className="bg-lime-700 hover:bg-lime-600 text-white font-bold px-4 py-2 rounded text-xs cursor-pointer flex items-center gap-1"
-            >
-              &lt; Previous
-            </button>
-            <button
-              onClick={() => setExamPhase('exam')}
-              className="bg-lime-700 hover:bg-lime-600 text-white font-bold px-4 py-2 rounded text-xs cursor-pointer flex items-center gap-1"
-            >
-              Next &gt;
-            </button>
-            <button
-              onClick={() => setExamPhase('exam')}
-              className="bg-lime-500 hover:bg-lime-400 text-slate-950 font-extrabold px-6 py-2 rounded shadow text-xs cursor-pointer flex items-center gap-1"
-            >
-              Start the Test &gt;
-            </button>
-          </div>
-        </footer>
       </div>
     );
   }
 
   // --------------------------------------------------------------------------
-  // PHASE 3: LIVE PROMETRIC QUESTION EXAM SCREEN (Prometric Screenshot 2)
+  // PHASE 3: LIVE PROMETRIC QUESTION EXAM SCREEN (Prometric Screenshot 1 & 2)
   // --------------------------------------------------------------------------
   if (examPhase === 'exam' && !isSubmitted) {
     const answeredCount = Object.keys(selectedAnswers).length;
     const isCurrentFlagged = flaggedQuestions[currentIndex];
 
     return (
-      <div className="fixed inset-0 bg-slate-200 z-50 flex flex-col font-sans select-none">
-        {/* Top Header Bar */}
-        <header className="bg-slate-800 text-white px-4 py-2.5 flex items-center justify-between text-xs font-mono border-b border-slate-900 shadow">
-          <div>
-            <span className="font-bold">Page: {currentIndex + 1} of {questions.length}</span>
-            <span className="mx-2 text-slate-500">|</span>
-            <span>Section: 1</span>
-          </div>
+      <div className="fixed inset-0 bg-[#c5d1d6] z-50 flex items-center justify-center p-3 font-sans select-none">
+        <div className="w-full max-w-[1280px] h-[95vh] bg-white border-2 border-slate-400 rounded shadow-2xl flex flex-col overflow-hidden">
+          {/* Top Header Bar */}
+          <header className="bg-[#444444] text-white px-4 py-2 flex items-center justify-between text-xs font-mono border-b border-slate-700 shadow">
+            <div className="leading-tight">
+              <div className="font-bold">Question:{currentIndex + 1}</div>
+              <div>Section:1</div>
+            </div>
 
-          <div className="flex items-center gap-2">
-            <Clock className="w-4 h-4 text-amber-400" />
-            <span className="font-bold text-sm text-amber-300">
-              Total Test Time Remaining: {formatTime(timeLeft)}
-            </span>
-          </div>
-
-          <button
-            onClick={() => setShowConfirmFinishModal(true)}
-            className="bg-amber-200 hover:bg-amber-300 text-slate-950 font-bold px-5 py-1.5 rounded border-2 border-slate-900 shadow text-xs cursor-pointer transition-all hover:scale-105"
-          >
-            Finish Test
-          </button>
-        </header>
-
-        {/* Sub Header Green Bar */}
-        <div className="bg-lime-600 text-white px-4 py-1.5 flex items-center justify-between text-xs font-bold shadow-sm">
-          <span>Test: {course.title}</span>
-          <span>Candidate: {candidateEmail}</span>
-        </div>
-
-        {/* Main Workspace: Left Vertical Navigator + Center Question Display */}
-        <div className="flex-1 flex overflow-hidden p-3 gap-3">
-          {/* Left Navigation Sidebar (Vertical Question Stack) */}
-          <div className="w-16 flex flex-col gap-1 overflow-y-auto pr-1">
-            {questions.map((q, idx) => {
-              const isSelected = idx === currentIndex;
-              const isAnswered = selectedAnswers[idx] !== undefined;
-              const isFlagged = flaggedQuestions[idx];
-
-              return (
-                <button
-                  key={q.id || idx}
-                  onClick={() => setCurrentIndex(idx)}
-                  className={`w-full py-2 px-1 rounded-l text-xs font-mono font-bold flex flex-col items-center justify-center transition-all cursor-pointer relative ${
-                    isSelected
-                      ? 'bg-lime-600 text-white shadow-md border-r-4 border-slate-900 font-black'
-                      : isAnswered
-                      ? 'bg-slate-700 text-blue-200 hover:bg-slate-600'
-                      : 'bg-slate-600 text-slate-300 hover:bg-slate-500'
-                  }`}
-                >
-                  <div className="flex items-center gap-1">
-                    {isFlagged ? (
-                      <Flag className="w-3 h-3 text-amber-400 fill-amber-400 shrink-0" />
-                    ) : isAnswered ? (
-                      <FileText className="w-3 h-3 text-emerald-400 shrink-0" />
-                    ) : null}
-                    <span>{idx + 1}</span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Center Main Question White Container */}
-          <div className="flex-1 bg-white border border-slate-300 rounded p-6 overflow-y-auto flex flex-col justify-between shadow-sm">
-            <div className="space-y-6">
-              {/* Question Text Box (Prometric Light Gray Rounded Box) */}
-              <div className="bg-slate-100 border border-slate-200 rounded p-5 text-slate-900 font-medium text-sm leading-relaxed shadow-xs">
-                <span className="font-bold text-slate-500 text-xs uppercase tracking-wider block mb-2 font-mono">
-                  Question {currentIndex + 1} of {questions.length}
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-amber-300" />
+                <span className="font-bold text-xs text-white">
+                  Section Time Remaining {formatTime(timeLeft)}
                 </span>
-                <p className="text-slate-900 font-medium whitespace-pre-line leading-relaxed">
-                  {currentQ.question}
-                </p>
               </div>
-
-              {/* Question Illustration Image (if present) */}
-              {currentQ.imageUrl && (
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded flex justify-center">
-                  <img
-                    src={currentQ.imageUrl}
-                    alt="Question Diagram"
-                    className="max-h-60 object-contain rounded border border-slate-300 shadow-sm"
+              <div className="flex items-center gap-2">
+                <div className="bg-slate-600 rounded-full h-2.5 w-28 overflow-hidden border border-slate-500">
+                  <div
+                    className="bg-[#76b82a] h-full transition-all duration-300"
+                    style={{ width: `${progressPercentage}%` }}
                   />
                 </div>
-              )}
+                <span className="text-[11px] text-slate-200">Progress {progressPercentage}%</span>
+              </div>
+            </div>
 
-              {/* Choices A, B, C, D Rectangular White Boxes */}
-              <div className="space-y-3 pt-2">
-                {currentQ.choices.map((choice) => {
-                  const isChoiceSelected = selectedAnswers[currentIndex] === choice.key;
-                  return (
-                    <div
-                      key={choice.key}
-                      onClick={() => handleSelectChoice(choice.key)}
-                      className={`border-2 rounded p-4 flex items-center gap-4 transition-all cursor-pointer select-none ${
-                        isChoiceSelected
-                          ? 'border-blue-600 bg-blue-50/80 shadow-md'
-                          : 'border-slate-800 bg-white hover:bg-slate-50'
-                      }`}
-                    >
+            <button
+              onClick={() => setShowConfirmFinishModal(true)}
+              className="bg-[#76b82a] hover:bg-[#68a424] text-white font-extrabold px-5 py-1.5 rounded shadow text-xs cursor-pointer transition-all hover:scale-105"
+            >
+              Finish Test
+            </button>
+          </header>
+
+          {/* Sub Header Green Bar */}
+          <div className="bg-[#76b82a] text-white px-4 py-1.5 flex items-center justify-between text-xs font-bold shadow-sm">
+            <span>Test: {course.title}</span>
+            <span>Candidate: {candidateEmail}</span>
+          </div>
+
+          {/* Main Workspace: Left Vertical Navigator + Center Question Display */}
+          <div className="flex-1 flex overflow-hidden p-3 gap-3 bg-[#ffffff]">
+            {/* Left Navigation Sidebar (Vertical Question Stack) */}
+            <div className="w-16 flex flex-col gap-1 overflow-y-auto pr-1">
+              {questions.map((q, idx) => {
+                const isSelected = idx === currentIndex;
+                const isAnswered = selectedAnswers[idx] !== undefined;
+                const isFlagged = flaggedQuestions[idx];
+
+                return (
+                  <button
+                    key={q.id || idx}
+                    onClick={() => setCurrentIndex(idx)}
+                    className={`w-full py-1.5 px-1 rounded-l text-xs font-mono font-bold flex items-center justify-center transition-all cursor-pointer relative ${
+                      isSelected
+                        ? 'bg-[#444444] text-white shadow-md font-black'
+                        : isFlagged
+                        ? 'bg-[#444444] text-amber-300'
+                        : 'bg-[#76b82a] text-white hover:bg-[#68a424]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1 w-full justify-between px-1">
+                      <span>{idx + 1}</span>
+                      {isFlagged ? (
+                        <Flag className="w-3 h-3 text-amber-300 fill-amber-300 shrink-0" />
+                      ) : isAnswered ? (
+                        <FileText className="w-3 h-3 text-emerald-200 shrink-0" />
+                      ) : null}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Center Main Question Display Window */}
+            <div className="flex-1 bg-white border border-slate-300 rounded p-6 overflow-y-auto flex flex-col justify-between shadow-xs">
+              <div className="space-y-6">
+                {/* Question Text Box (Prometric Light Gray Box) */}
+                <div className="bg-[#f5f5f5] border border-slate-200 rounded p-5 text-slate-900 font-medium text-sm leading-relaxed shadow-xs">
+                  <p className="text-slate-900 font-semibold leading-relaxed">
+                    {currentQ.question}
+                  </p>
+                </div>
+
+                {/* Question Illustration Image (if present) */}
+                {currentQ.imageUrl && (
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded flex justify-center">
+                    <img
+                      src={currentQ.imageUrl}
+                      alt="Question Diagram"
+                      className="max-h-60 object-contain rounded border border-slate-300 shadow-sm"
+                    />
+                  </div>
+                )}
+
+                {/* Choices A, B, C, D Rectangular Boxes */}
+                <div className="space-y-3 pt-2">
+                  {currentQ.choices.map((choice) => {
+                    const isChoiceSelected = selectedAnswers[currentIndex] === choice.key;
+                    return (
                       <div
-                        className={`w-7 h-7 rounded font-extrabold text-xs flex items-center justify-center font-mono shrink-0 ${
+                        key={choice.key}
+                        onClick={() => handleSelectChoice(choice.key)}
+                        className={`border-2 rounded p-3.5 flex items-center gap-4 transition-all cursor-pointer select-none ${
                           isChoiceSelected
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-slate-200 text-slate-800 border border-slate-300'
+                            ? 'border-[#b87e00] bg-[#e5a417] text-slate-950 font-bold shadow-md'
+                            : 'border-[#444444] bg-white hover:bg-slate-50 text-slate-900'
                         }`}
                       >
-                        {choice.key}
+                        <div
+                          className={`w-6 h-6 rounded font-extrabold text-xs flex items-center justify-center font-mono shrink-0 ${
+                            isChoiceSelected
+                              ? 'bg-slate-900 text-amber-400'
+                              : 'bg-slate-100 text-slate-800 border border-slate-300'
+                          }`}
+                        >
+                          {choice.key}
+                        </div>
+                        <span className="text-xs font-semibold flex-1 leading-snug">
+                          {choice.text}
+                        </span>
                       </div>
-                      <span className="text-xs font-semibold text-slate-900 flex-1 leading-snug">
-                        {choice.text}
-                      </span>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Bottom Navigation Footer Bar */}
-        <footer className="bg-slate-900 text-white px-4 py-2.5 flex items-center justify-between border-t-2 border-lime-600 text-xs">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => {}}
-              className="p-1.5 hover:bg-slate-800 rounded text-slate-300 cursor-pointer"
-              title="Settings"
-            >
-              <Settings className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setShowQuestionGridModal(true)}
-              className="p-1.5 hover:bg-slate-800 rounded text-slate-300 cursor-pointer"
-              title="Question Matrix Grid"
-            >
-              <Grid className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setShowHelpModal(true)}
-              className="p-1.5 hover:bg-slate-800 rounded text-slate-300 cursor-pointer"
-              title="Help Instructions"
-            >
-              <HelpCircle className="w-4 h-4" />
-            </button>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => toggleFlag(currentIndex)}
-              className={`px-3.5 py-1.5 rounded font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-all ${
-                isCurrentFlagged
-                  ? 'bg-amber-500 text-slate-950 shadow'
-                  : 'bg-lime-700 hover:bg-lime-600 text-white'
-              }`}
-            >
-              <Flag className={`w-3.5 h-3.5 ${isCurrentFlagged ? 'fill-slate-950' : ''}`} />
-              <span>{isCurrentFlagged ? 'Flagged' : 'Flag Question'}</span>
-            </button>
-
-            <button
-              onClick={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
-              disabled={currentIndex === 0}
-              className={`px-4 py-1.5 rounded font-bold text-xs cursor-pointer flex items-center gap-1 ${
-                currentIndex === 0
-                  ? 'bg-slate-800 text-slate-600 cursor-not-allowed'
-                  : 'bg-lime-700 hover:bg-lime-600 text-white'
-              }`}
-            >
-              &lt; Back
-            </button>
-
-            <button
-              onClick={() => {
-                if (currentIndex < questions.length - 1) {
-                  setCurrentIndex((prev) => prev + 1);
-                } else {
-                  setShowConfirmFinishModal(true);
-                }
-              }}
-              className="bg-lime-500 hover:bg-lime-400 text-slate-950 font-extrabold px-6 py-1.5 rounded shadow text-xs cursor-pointer flex items-center gap-1"
-            >
-              {currentIndex === questions.length - 1 ? 'Finish Test >' : 'Next >'}
-            </button>
-          </div>
-        </footer>
-
-        {/* CONFIRM FINISH MODAL */}
-        {showConfirmFinishModal && (
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-lg w-full max-w-md p-6 space-y-4 shadow-2xl border border-slate-300">
-              <h3 className="font-display font-extrabold text-slate-900 text-base flex items-center gap-2">
-                <AlertCircle className="w-5 h-5 text-amber-500" />
-                Finish Test Confirmation
-              </h3>
-
-              <div className="bg-slate-50 border border-slate-200 rounded p-4 text-xs space-y-2 text-slate-700 font-mono">
-                <p className="flex justify-between">
-                  <span>Total Questions:</span>
-                  <strong className="text-slate-900">{questions.length}</strong>
-                </p>
-                <p className="flex justify-between">
-                  <span>Answered Questions:</span>
-                  <strong className="text-emerald-700">{answeredCount}</strong>
-                </p>
-                <p className="flex justify-between">
-                  <span>Unanswered Questions:</span>
-                  <strong className="text-rose-700">{questions.length - answeredCount}</strong>
-                </p>
-                <p className="flex justify-between">
-                  <span>Flagged Questions:</span>
-                  <strong className="text-amber-700">{Object.values(flaggedQuestions).filter(Boolean).length}</strong>
-                </p>
-              </div>
-
-              <p className="text-xs text-slate-600">
-                Are you sure you want to finish and submit your exam answers?
-              </p>
-
-              <div className="flex justify-end gap-3 pt-2">
-                <button
-                  onClick={() => setShowConfirmFinishModal(false)}
-                  className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold px-4 py-2 rounded text-xs cursor-pointer"
-                >
-                  Return to Test
-                </button>
-                <button
-                  onClick={handleFinishTestSubmit}
-                  className="bg-lime-600 hover:bg-lime-500 text-white font-bold px-5 py-2 rounded text-xs shadow cursor-pointer"
-                >
-                  Submit & Finish Test
-                </button>
-              </div>
+          {/* Bottom Navigation Footer Bar */}
+          <footer className="bg-[#444444] text-white px-4 py-2.5 flex items-center justify-between border-t border-slate-600 text-xs">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => {}}
+                className="p-1.5 hover:bg-slate-700 rounded text-slate-200 cursor-pointer"
+                title="Settings"
+              >
+                <Settings className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setShowQuestionGridModal(true)}
+                className="p-1.5 hover:bg-slate-700 rounded text-slate-200 cursor-pointer"
+                title="Question Matrix Grid"
+              >
+                <Grid className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setShowHelpModal(true)}
+                className="p-1.5 hover:bg-slate-700 rounded text-slate-200 cursor-pointer"
+                title="Help Instructions"
+              >
+                <HelpCircle className="w-4 h-4" />
+              </button>
             </div>
-          </div>
-        )}
 
-        {/* QUESTION GRID MODAL */}
-        {showQuestionGridModal && (
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-lg w-full max-w-2xl p-6 space-y-4 shadow-2xl border border-slate-300">
-              <div className="flex items-center justify-between border-b pb-3">
-                <h3 className="font-display font-bold text-slate-900 text-base flex items-center gap-2">
-                  <Grid className="w-5 h-5 text-lime-600" />
-                  Question Matrix Navigator
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => toggleFlag(currentIndex)}
+                className={`p-2 rounded font-bold text-xs flex items-center justify-center cursor-pointer transition-all ${
+                  isCurrentFlagged
+                    ? 'bg-amber-400 text-slate-950 shadow'
+                    : 'bg-[#76b82a] hover:bg-[#68a424] text-white'
+                }`}
+                title="Flag Question"
+              >
+                <Flag className={`w-4 h-4 ${isCurrentFlagged ? 'fill-slate-950' : 'fill-white'}`} />
+              </button>
+
+              <button
+                onClick={() => setCurrentIndex((prev) => Math.max(0, prev - 1))}
+                disabled={currentIndex === 0}
+                className={`px-4 py-1.5 rounded font-bold text-xs cursor-pointer flex items-center gap-1 ${
+                  currentIndex === 0
+                    ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
+                    : 'bg-[#76b82a] hover:bg-[#68a424] text-white'
+                }`}
+              >
+                &lt; Back
+              </button>
+
+              <button
+                onClick={() => {
+                  if (currentIndex < questions.length - 1) {
+                    setCurrentIndex((prev) => prev + 1);
+                  } else {
+                    setShowConfirmFinishModal(true);
+                  }
+                }}
+                className="bg-[#76b82a] hover:bg-[#68a424] text-white font-extrabold px-6 py-1.5 rounded shadow text-xs cursor-pointer flex items-center gap-1"
+              >
+                {currentIndex === questions.length - 1 ? 'Finish Test >' : 'Next >'}
+              </button>
+            </div>
+          </footer>
+
+          {/* CONFIRM FINISH MODAL */}
+          {showConfirmFinishModal && (
+            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-lg w-full max-w-md p-6 space-y-4 shadow-2xl border border-slate-300">
+                <h3 className="font-display font-extrabold text-slate-900 text-base flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5 text-amber-500" />
+                  Finish Test Confirmation
                 </h3>
-                <button onClick={() => setShowQuestionGridModal(false)} className="text-slate-400 hover:text-slate-700">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
 
-              <div className="grid grid-cols-5 sm:grid-cols-10 gap-2 max-h-[60vh] overflow-y-auto p-2">
-                {questions.map((q, idx) => {
-                  const isAns = selectedAnswers[idx] !== undefined;
-                  const isFlg = flaggedQuestions[idx];
-                  return (
-                    <button
-                      key={q.id || idx}
-                      onClick={() => {
-                        setCurrentIndex(idx);
-                        setShowQuestionGridModal(false);
-                      }}
-                      className={`p-2.5 rounded font-mono font-bold text-xs flex flex-col items-center justify-center gap-1 border cursor-pointer ${
-                        idx === currentIndex
-                          ? 'bg-lime-600 text-white border-lime-700'
-                          : isAns
-                          ? 'bg-slate-700 text-blue-200 border-slate-800'
-                          : 'bg-slate-100 text-slate-800 border-slate-300'
-                      }`}
-                    >
-                      <span>{idx + 1}</span>
-                      {isFlg && <Flag className="w-3 h-3 text-amber-400 fill-amber-400" />}
-                    </button>
-                  );
-                })}
-              </div>
+                <div className="bg-slate-50 border border-slate-200 rounded p-4 text-xs space-y-2 text-slate-700 font-mono">
+                  <p className="flex justify-between">
+                    <span>Total Questions:</span>
+                    <strong className="text-slate-900">{questions.length}</strong>
+                  </p>
+                  <p className="flex justify-between">
+                    <span>Answered Questions:</span>
+                    <strong className="text-emerald-700">{answeredCount}</strong>
+                  </p>
+                  <p className="flex justify-between">
+                    <span>Unanswered Questions:</span>
+                    <strong className="text-rose-700">{questions.length - answeredCount}</strong>
+                  </p>
+                  <p className="flex justify-between">
+                    <span>Flagged Questions:</span>
+                    <strong className="text-amber-700">{Object.values(flaggedQuestions).filter(Boolean).length}</strong>
+                  </p>
+                </div>
 
-              <div className="flex justify-end">
-                <button
-                  onClick={() => setShowQuestionGridModal(false)}
-                  className="bg-slate-800 text-white font-bold px-4 py-1.5 rounded text-xs"
-                >
-                  Close
-                </button>
+                <p className="text-xs text-slate-600">
+                  Are you sure you want to finish and submit your exam answers?
+                </p>
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    onClick={() => setShowConfirmFinishModal(false)}
+                    className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold px-4 py-2 rounded text-xs cursor-pointer"
+                  >
+                    Return to Test
+                  </button>
+                  <button
+                    onClick={handleFinishTestSubmit}
+                    className="bg-[#76b82a] hover:bg-[#68a424] text-white font-bold px-5 py-2 rounded text-xs shadow cursor-pointer"
+                  >
+                    Submit & Finish Test
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
+
+          {/* QUESTION GRID MODAL */}
+          {showQuestionGridModal && (
+            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-lg w-full max-w-2xl p-6 space-y-4 shadow-2xl border border-slate-300">
+                <div className="flex items-center justify-between border-b pb-3">
+                  <h3 className="font-display font-bold text-slate-900 text-base flex items-center gap-2">
+                    <Grid className="w-5 h-5 text-[#76b82a]" />
+                    Question Matrix Navigator
+                  </h3>
+                  <button onClick={() => setShowQuestionGridModal(false)} className="text-slate-400 hover:text-slate-700">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-5 sm:grid-cols-10 gap-2 max-h-[60vh] overflow-y-auto p-2">
+                  {questions.map((q, idx) => {
+                    const isAns = selectedAnswers[idx] !== undefined;
+                    const isFlg = flaggedQuestions[idx];
+                    return (
+                      <button
+                        key={q.id || idx}
+                        onClick={() => {
+                          setCurrentIndex(idx);
+                          setShowQuestionGridModal(false);
+                        }}
+                        className={`p-2.5 rounded font-mono font-bold text-xs flex flex-col items-center justify-center gap-1 border cursor-pointer ${
+                          idx === currentIndex
+                            ? 'bg-[#444444] text-white border-slate-700'
+                            : isAns
+                            ? 'bg-[#76b82a] text-white border-lime-700'
+                            : 'bg-slate-100 text-slate-800 border-slate-300'
+                        }`}
+                      >
+                        <span>{idx + 1}</span>
+                        {isFlg && <Flag className="w-3 h-3 text-amber-300 fill-amber-300" />}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => setShowQuestionGridModal(false)}
+                    className="bg-[#444444] text-white font-bold px-4 py-1.5 rounded text-xs"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     );
   }
@@ -680,13 +688,13 @@ export default function UdemyMockExam({ course, onClose }: UdemyMockExamProps) {
   const score = calculateScore();
 
   return (
-    <div className="fixed inset-0 bg-slate-900 z-50 overflow-y-auto p-4 md:p-8 font-sans">
+    <div className="fixed inset-0 bg-[#c5d1d6] z-50 overflow-y-auto p-4 md:p-8 font-sans">
       <div className="max-w-4xl mx-auto space-y-6">
         {/* Prometric Official Report Header */}
-        <div className="bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden">
-          <div className="bg-slate-900 text-white p-6 flex items-center justify-between border-b border-slate-800">
+        <div className="bg-white rounded-xl shadow-2xl border-2 border-slate-300 overflow-hidden">
+          <div className="bg-[#444444] text-white p-6 flex items-center justify-between border-b border-slate-600">
             <div>
-              <span className="font-mono text-xs font-bold text-lime-400 uppercase tracking-widest block mb-1">
+              <span className="font-mono text-xs font-bold text-[#76b82a] uppercase tracking-widest block mb-1">
                 PROMETRIC OFFICIAL SCORE REPORT
               </span>
               <h2 className="font-display font-extrabold text-xl text-white">
@@ -695,7 +703,7 @@ export default function UdemyMockExam({ course, onClose }: UdemyMockExamProps) {
             </div>
             <button
               onClick={onClose}
-              className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-4 py-2 rounded text-xs flex items-center gap-2 cursor-pointer"
+              className="bg-slate-700 hover:bg-slate-600 text-white font-bold px-4 py-2 rounded text-xs flex items-center gap-2 cursor-pointer"
             >
               <X className="w-4 h-4" /> Close Exam
             </button>
@@ -756,8 +764,8 @@ export default function UdemyMockExam({ course, onClose }: UdemyMockExamProps) {
 
         {/* Detailed Question Review & AI Explanations */}
         <div className="space-y-4">
-          <h3 className="font-display font-bold text-white text-base flex items-center gap-2">
-            <FileText className="w-5 h-5 text-lime-400" />
+          <h3 className="font-display font-bold text-slate-900 text-base flex items-center gap-2">
+            <FileText className="w-5 h-5 text-[#76b82a]" />
             Detailed Question Review & Official Answer Keys
           </h3>
 
