@@ -188,7 +188,7 @@ app.get("/api/courses", async (req, res) => {
         }
       }
 
-      const sets = inMemoryCourseExamSets[item.id] || inMemoryCourseExamSets[targetUuid] || [
+      const sets = item.exam_sets || inMemoryCourseExamSets[item.id] || inMemoryCourseExamSets[targetUuid] || [
         {
           id: 'set-1',
           title: 'Dump 01',
@@ -737,7 +737,83 @@ app.post("/api/admin/courses/sets/update", requireAdminAuth, async (req, res) =>
     inMemoryCourseQuestions[courseId] = allQuestions;
     inMemoryCourseQuestions[targetUuid] = allQuestions;
 
-    res.json({ success: true, message: `Successfully saved ${examSets.length} exam set(s) for course!` });
+    const supabase = getSupabase();
+    if (supabase) {
+      // 1. Update `exam_sets` JSONB column in `courses` table
+      try {
+        await supabase
+          .from('courses')
+          .update({ exam_sets: examSets })
+          .eq('id', targetUuid);
+      } catch (e) {}
+
+      // 2. Sync all questions to 3NF schema tables ('exam_questions' & 'question_options')
+      if (allQuestions.length > 0) {
+        try {
+          const fallbackObj = fallbackCourses.find(f => f.id === courseId) || fallbackCourses[0];
+          const hex = targetUuid.replace(/-/g, '');
+          const examId = `${hex.substring(0, 8)}-${hex.substring(8, 12)}-4${hex.substring(13, 16)}-a${hex.substring(17, 20)}-${hex.substring(20, 32)}`;
+
+          await supabase.from('courses').upsert({
+            id: targetUuid,
+            title: fallbackObj.title,
+            price: fallbackObj.price || 29.99,
+            image_url: fallbackObj.imageUrl || '',
+            description: fallbackObj.description || '',
+            exam_sets: examSets
+          });
+
+          await supabase.from('exams').upsert({
+            id: examId,
+            course_id: targetUuid,
+            title: `${fallbackObj.title} - Official Practice Exam`
+          });
+
+          // Delete existing questions for clean replacement
+          const { data: existingQs } = await supabase.from("exam_questions").select("id").eq("exam_id", examId);
+          if (existingQs && existingQs.length > 0) {
+            const qIds = existingQs.map(q => q.id);
+            await supabase.from("question_options").delete().in("question_id", qIds);
+            await supabase.from("exam_questions").delete().eq("exam_id", examId);
+          }
+
+          // Insert questions
+          const examPayload = allQuestions.map((q: any) => ({
+            exam_id: examId,
+            question_text: q.question,
+            correct_answer: q.correctAnswer || q.correct_answer || 'A',
+            explanation: q.explanation || "Official OutSystems Exam Question",
+            image_url: q.imageUrl || q.image_url || null
+          }));
+
+          for (let i = 0; i < examPayload.length; i += 50) {
+            const chunk = examPayload.slice(i, i + 50);
+            const { data: insertedQs, error: insErr } = await supabase.from("exam_questions").insert(chunk).select();
+
+            if (!insErr && insertedQs) {
+              const optionsPayload: any[] = [];
+              insertedQs.forEach((iq: any, idx: number) => {
+                const originalChoices = allQuestions[i + idx]?.choices || [];
+                originalChoices.forEach((opt: any) => {
+                  optionsPayload.push({
+                    question_id: iq.id,
+                    option_key: opt.key,
+                    option_text: opt.text
+                  });
+                });
+              });
+              if (optionsPayload.length > 0) {
+                await supabase.from("question_options").insert(optionsPayload);
+              }
+            }
+          }
+        } catch (dbErr: any) {
+          console.error("Supabase question sync error:", dbErr.message);
+        }
+      }
+    }
+
+    res.json({ success: true, message: `Successfully saved ${examSets.length} exam set(s) to database!` });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message || "Failed to update exam sets." });
   }

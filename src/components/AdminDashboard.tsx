@@ -854,56 +854,29 @@ export default function AdminDashboard({
         const currentCourse = courses.find((c) => c.id === selectedCourseId);
         if (!currentCourse) return;
 
-        if (csvImportMode === 'replace_all') {
-          // Bulk replace all old exam sets with fresh Dump 01
-          const newSets: ExamSet[] = [
-            {
-              id: 'set-1',
-              title: 'Dump 01',
-              description: 'Bài kiểm tra thực hành Dump 01',
-              durationMinutes: 90,
-              passingScorePct: 70,
-              randomizeQuestions: false,
-              questions: newQuestions
-            }
-          ];
+        const currentSets = getCourseExamSets(currentCourse);
+        const activeSetId = selectedSetId || currentSets[0].id;
+        const activeSetObj = currentSets.find(s => s.id === activeSetId) || currentSets[0];
 
-          const updatedCourses = courses.map((c) => {
-            if (c.id === selectedCourseId) {
-              return { ...c, mockExam: newQuestions, examSets: newSets };
-            }
-            return c;
-          });
+        const updatedSets = currentSets.map((s) => {
+          if (s.id === activeSetId) {
+            return { ...s, questions: newQuestions };
+          }
+          return s;
+        });
 
-          onUpdateCourses(updatedCourses);
-          await saveExamSetsToBackend(selectedCourseId, newSets);
-          await handleSaveAllQuestionsToSupabase(newQuestions);
-          setCsvMessage(`✅ Đã thay thế hàng loạt ${newQuestions.length} câu hỏi mới vào Dump 01!`);
-        } else {
-          // Import into selected / active Exam Set
-          const currentSets = getCourseExamSets(currentCourse);
-          const activeSetId = selectedSetId || currentSets[0].id;
+        const allQs = updatedSets.flatMap(s => s.questions);
+        const updatedCourses = courses.map((c) => {
+          if (c.id === selectedCourseId) {
+            return { ...c, mockExam: allQs, examSets: updatedSets };
+          }
+          return c;
+        });
 
-          const updatedSets = currentSets.map((s) => {
-            if (s.id === activeSetId) {
-              return { ...s, questions: newQuestions };
-            }
-            return s;
-          });
-
-          const allQs = updatedSets.flatMap(s => s.questions);
-          const updatedCourses = courses.map((c) => {
-            if (c.id === selectedCourseId) {
-              return { ...c, mockExam: allQs, examSets: updatedSets };
-            }
-            return c;
-          });
-
-          onUpdateCourses(updatedCourses);
-          await saveExamSetsToBackend(selectedCourseId, updatedSets);
-          await handleSaveAllQuestionsToSupabase(allQs);
-          setCsvMessage(`✅ Đã cập nhật ${newQuestions.length} câu hỏi vào bộ đề!`);
-        }
+        onUpdateCourses(updatedCourses);
+        await saveExamSetsToBackend(selectedCourseId, updatedSets);
+        await handleSaveAllQuestionsToSupabase(allQs);
+        setCsvMessage(`✅ Đã thay thế ${newQuestions.length} câu hỏi mới vào bộ đề "${activeSetObj.title}"!`);
       } else {
         setCsvMessage('Could not parse questions. Check CSV columns format.');
       }
@@ -1571,51 +1544,6 @@ export default function AdminDashboard({
               </select>
             </div>
 
-            {/* CSV Action Bar */}
-            <div className="bg-slate-800 border border-slate-700 p-4 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <div>
-                <h3 className="font-display font-bold text-xs text-white flex items-center gap-2">
-                  <Upload className="w-4 h-4 text-blue-400" /> CSV Import & Storage Sync
-                </h3>
-                <p className="text-[11px] text-slate-400 mt-0.5">
-                  Target Course: <strong className="text-blue-300">{selectedCourse.title}</strong>
-                </p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2.5">
-                <button
-                  onClick={handleDownloadTemplate}
-                  className="bg-slate-700 hover:bg-slate-600 border border-slate-600 text-slate-200 font-bold text-xs py-2 px-3.5 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
-                >
-                  <Download className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Download Template CSV</span>
-                </button>
-
-                <button
-                  onClick={() => setIsConfirmImportOpen(true)}
-                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs py-2 px-4 rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Upload className="w-3.5 h-3.5" />
-                  <span>Import Questions (CSV)</span>
-                </button>
-
-                <button
-                  onClick={() => handleSaveAllQuestionsToSupabase()}
-                  disabled={isSavingQuestions}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-2 px-4 rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                >
-                  <Save className="w-3.5 h-3.5 text-white" />
-                  <span>{isSavingQuestions ? 'Saving...' : 'Save to Supabase'}</span>
-                </button>
-              </div>
-            </div>
-
-            {csvMessage && (
-              <div className="bg-slate-900 border border-slate-700 p-3 rounded-xl text-xs font-bold text-emerald-400 animate-in fade-in">
-                {csvMessage}
-              </div>
-            )}
-
             {/* SCREENSHOT 1 VIEW: OVERVIEW OF EXAM SETS FOR COURSE (When selectedSetId === null) */}
             {selectedSetId === null ? (
               <div className="bg-slate-800 border border-slate-700 p-6 rounded-2xl space-y-6">
@@ -1768,11 +1696,51 @@ export default function AdminDashboard({
                     </div>
                   </div>
 
-                  {/* Right Column: Set Settings Form (Screenshot 2 Match) */}
+                  {/* Right Column: Set Settings Form (Screenshot 2 Match) & CSV Import */}
                   <div className="bg-slate-800 border border-slate-700 p-6 rounded-2xl space-y-5 lg:col-span-2">
                     <h3 className="font-display font-extrabold text-base text-white border-b border-slate-700 pb-3">
                       Lập kế hoạch cho bài kiểm tra thực hành
                     </h3>
+
+                    {/* CSV IMPORT BAR EMBEDDED INSIDE THIS SPECIFIC EXAM SET */}
+                    <div className="bg-slate-900 border border-slate-700 p-4 rounded-xl space-y-3">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                        <div>
+                          <h4 className="font-display font-bold text-xs text-white flex items-center gap-2">
+                            <Upload className="w-4 h-4 text-purple-400" /> CSV Import câu hỏi cho bộ đề này
+                          </h4>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            Thao tác này sẽ <strong className="text-amber-300">thay thế (replace) toàn bộ câu hỏi hiện tại</strong> của bộ đề bằng file CSV.
+                          </p>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={handleDownloadTemplate}
+                            className="bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 font-bold text-xs py-2 px-3 rounded-lg flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Download className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Mẫu CSV</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => csvFileInputRef.current?.click()}
+                            className="bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs py-2 px-3.5 rounded-lg flex items-center gap-1.5 cursor-pointer shadow-md"
+                          >
+                            <Upload className="w-3.5 h-3.5" />
+                            <span>Import Questions (CSV)</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {csvMessage && (
+                        <div className="bg-slate-950 border border-slate-800 p-2.5 rounded-lg text-xs font-bold text-emerald-400 animate-in fade-in">
+                          {csvMessage}
+                        </div>
+                      )}
+                    </div>
 
                     <div className="space-y-4">
                       {/* Tiêu đề */}
@@ -1971,95 +1939,6 @@ export default function AdminDashboard({
         )}
 
       </main>
-
-      {/* POPUP MODAL 1: CONFIRMATION MODAL FOR CSV IMPORT */}
-      {isConfirmImportOpen && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 border border-slate-700 rounded-3xl w-full max-w-lg shadow-2xl p-6 space-y-5 animate-in zoom-in-95 duration-150">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-amber-500/20 text-amber-400 rounded-2xl flex items-center justify-center font-bold border border-amber-500/30 shrink-0">
-                <AlertTriangle className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="font-display font-bold text-base text-white">Import CSV & Re-populate Exam Sets</h3>
-                <p className="text-xs text-slate-400">Course: <span className="text-blue-300 font-bold">{selectedCourse.title}</span></p>
-              </div>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <label className="font-bold text-slate-300 block">Chọn chế độ Import CSV:</label>
-
-              <div
-                onClick={() => setCsvImportMode('replace_all')}
-                className={`p-3.5 rounded-xl border-2 cursor-pointer transition-all flex items-start gap-3 ${
-                  csvImportMode === 'replace_all'
-                    ? 'bg-purple-950/50 border-purple-500 text-purple-200 font-bold'
-                    : 'bg-slate-900 border-slate-700 text-slate-400'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="import_mode"
-                  checked={csvImportMode === 'replace_all'}
-                  onChange={() => setCsvImportMode('replace_all')}
-                  className="mt-0.5 accent-purple-600 cursor-pointer"
-                />
-                <div>
-                  <span className="text-white font-bold block">Replace hàng loạt toàn bộ bộ đề cũ</span>
-                  <span className="text-[11px] font-normal text-slate-400">
-                    Xóa sạch toàn bộ các bộ đề cũ của khóa học này và thay bằng bộ đề thi mới từ file CSV.
-                  </span>
-                </div>
-              </div>
-
-              <div
-                onClick={() => setCsvImportMode('target_set')}
-                className={`p-3.5 rounded-xl border-2 cursor-pointer transition-all flex items-start gap-3 ${
-                  csvImportMode === 'target_set'
-                    ? 'bg-purple-950/50 border-purple-500 text-purple-200 font-bold'
-                    : 'bg-slate-900 border-slate-700 text-slate-400'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="import_mode"
-                  checked={csvImportMode === 'target_set'}
-                  onChange={() => setCsvImportMode('target_set')}
-                  className="mt-0.5 accent-purple-600 cursor-pointer"
-                />
-                <div>
-                  <span className="text-white font-bold block">Import vào bộ đề hiện tại</span>
-                  <span className="text-[11px] font-normal text-slate-400">
-                    Cập nhật danh sách câu hỏi vào bộ đề thi đang chọn ({selectedSetId ? setFormTitle : 'Dump 01'}).
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setIsConfirmImportOpen(false)}
-                className="bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold px-4 py-2.5 rounded-xl text-xs cursor-pointer"
-              >
-                Hủy
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsConfirmImportOpen(false);
-                  setTimeout(() => {
-                    csvFileInputRef.current?.click();
-                  }, 100);
-                }}
-                className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-5 py-2.5 rounded-xl text-xs shadow-lg flex items-center gap-2 cursor-pointer"
-              >
-                <Upload className="w-4 h-4" /> Chọn file CSV & Tiến hành Import
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* POPUP MODAL 2: COURSE EDIT MODAL OVERLAY */}
       {editingCourse && (
