@@ -919,6 +919,105 @@ async function sendAdminEmailAlert(subject: string, textBody: string): Promise<b
   }
 }
 
+// System Settings API Endpoints (Supabase Persistence for Alerts & API Configuration)
+async function loadNotificationSettingsFromSupabase() {
+  const supabase = getSupabase();
+  if (!supabase) return;
+  try {
+    const { data, error } = await supabase.from("system_settings").select("*");
+    if (!error && data && data.length > 0) {
+      data.forEach((item: any) => {
+        if (item.key === 'admin_email') notificationSettings.adminEmail = item.value;
+        if (item.key === 'gmail_app_password') notificationSettings.gmailAppPassword = item.value;
+        if (item.key === 'telegram_bot_token') notificationSettings.telegramBotToken = item.value;
+        if (item.key === 'telegram_chat_id') notificationSettings.telegramChatId = item.value;
+      });
+    }
+  } catch (e: any) {
+    console.error("System settings Supabase sync note:", e.message);
+  }
+}
+
+loadNotificationSettingsFromSupabase();
+
+const handleGetSettings = async (req: express.Request, res: express.Response) => {
+  await loadNotificationSettingsFromSupabase();
+  res.json({
+    success: true,
+    adminEmail: notificationSettings.adminEmail,
+    gmailAppPassword: notificationSettings.gmailAppPassword,
+    telegramBotToken: notificationSettings.telegramBotToken,
+    telegramChatId: notificationSettings.telegramChatId,
+    settings: {
+      adminEmail: notificationSettings.adminEmail,
+      gmailAppPassword: notificationSettings.gmailAppPassword,
+      telegramBotToken: notificationSettings.telegramBotToken,
+      telegramChatId: notificationSettings.telegramChatId
+    }
+  });
+};
+
+app.get("/api/admin/notification-settings", requireAdminAuth, handleGetSettings);
+app.get("/api/admin/settings", requireAdminAuth, handleGetSettings);
+
+const handleSaveSettings = async (req: express.Request, res: express.Response) => {
+  try {
+    const { adminEmail, gmailAppPassword, telegramBotToken, telegramChatId } = req.body;
+
+    if (adminEmail !== undefined) notificationSettings.adminEmail = (adminEmail || "").trim();
+    if (gmailAppPassword !== undefined) notificationSettings.gmailAppPassword = (gmailAppPassword || "").trim();
+    if (telegramBotToken !== undefined) notificationSettings.telegramBotToken = (telegramBotToken || "").trim();
+    if (telegramChatId !== undefined) notificationSettings.telegramChatId = (telegramChatId || "").trim();
+
+    const supabase = getSupabase();
+    if (supabase) {
+      const payload = [
+        { key: "admin_email", value: notificationSettings.adminEmail, updated_at: new Date().toISOString() },
+        { key: "gmail_app_password", value: notificationSettings.gmailAppPassword, updated_at: new Date().toISOString() },
+        { key: "telegram_bot_token", value: notificationSettings.telegramBotToken, updated_at: new Date().toISOString() },
+        { key: "telegram_chat_id", value: notificationSettings.telegramChatId, updated_at: new Date().toISOString() }
+      ];
+      const { error } = await supabase.from("system_settings").upsert(payload, { onConflict: "key" });
+      if (error) {
+        console.error("Supabase settings upsert note:", error.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: "Notification & API settings saved successfully to Supabase database!"
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || "Failed to save settings." });
+  }
+};
+
+app.post("/api/admin/notification-settings", requireAdminAuth, handleSaveSettings);
+app.post("/api/admin/settings", requireAdminAuth, handleSaveSettings);
+
+app.post("/api/admin/test-email", requireAdminAuth, async (req, res) => {
+  const success = await sendAdminEmailAlert(
+    "OutSystems Pro Academy - Test Gmail Alert",
+    "This is a test notification email from your OutSystems Pro Academy certification portal."
+  );
+  if (success) {
+    res.json({ success: true, message: `Test email sent successfully to ${notificationSettings.adminEmail}!` });
+  } else {
+    res.status(400).json({ success: false, message: "Failed to send Gmail alert. Please check Admin Gmail Address & App Password settings." });
+  }
+});
+
+app.post("/api/admin/test-telegram", requireAdminAuth, async (req, res) => {
+  const success = await sendTelegramAlert(
+    "🚨 *OutSystems Pro Academy - Test Telegram Alert*\nThis is a test notification from your certification platform admin dashboard."
+  );
+  if (success) {
+    res.json({ success: true, message: "Test Telegram alert sent successfully!" });
+  } else {
+    res.status(400).json({ success: false, message: "Failed to send Telegram alert. Please check Bot Token & Chat ID settings." });
+  }
+});
+
 // Payment request creation endpoint connected to Supabase orders table
 app.post("/api/payment-request", async (req, res) => {
   try {

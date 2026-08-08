@@ -397,10 +397,13 @@ export default function AdminDashboard({
   };
 
   const handleGenerateCode = (email: string, cId: string) => {
-    const course = courses.find((c) => c.id === cId);
-    const prefix = course?.title.toLowerCase().includes('odc') ? 'OUT-ODC' : 'OUT-REACTIVE';
-    const randomHash = Math.random().toString(36).substring(2, 7).toUpperCase();
-    const newCode = `${prefix}-90D-${randomHash}`;
+    // Generate 6-12 uppercase alphanumeric code without spaces, e.g. OS025NABQVC9
+    const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    let randomPart = '';
+    for (let i = 0; i < 10; i++) {
+      randomPart += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    const newCode = `OS${randomPart}`;
 
     const newCodeObj: ActivationCode = {
       id: 'code_' + Date.now(),
@@ -1880,7 +1883,7 @@ export default function AdminDashboard({
                     </div>
                     <button
                       type="button"
-                      onClick={handleTestGmail}
+                      onClick={handleTestEmail}
                       disabled={testingEmail}
                       className="w-full bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold py-2.5 rounded-xl cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
                     >
