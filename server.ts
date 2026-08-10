@@ -223,11 +223,15 @@ app.get("/api/courses", async (req, res) => {
         }
       }
 
+      const resolvedPrice = (item.price !== undefined && item.price !== null && item.price !== '' && !isNaN(Number(item.price)))
+        ? Number(item.price)
+        : (fallback ? Number(fallback.price) : 29.99);
+
       return {
         id: item.id,
-        title: item.title,
+        title: item.title || (fallback ? fallback.title : ""),
         description: description,
-        price: Number(item.price || 29.99),
+        price: resolvedPrice,
         imageUrl: imageUrl,
         tags: tags,
         previewQuestions: fallback ? fallback.previewQuestions : [],
@@ -631,47 +635,60 @@ app.post("/api/admin/courses/upsert", requireAdminAuth, async (req, res) => {
     const platformTag = tags?.find((t: any) => t.text === 'O11' || t.text === 'ODC')?.text || 'O11';
     const isNewTag = tags?.some((t: any) => t.text === 'NEW') || false;
 
-    // 1. Update in-memory fallbackCourses array on the server FIRST
-    const fIdx = fallbackCourses.findIndex(f => 
-      f.id === id || 
-      f.id === targetUuid || 
-      f.title.toLowerCase().includes((title || '').toLowerCase())
-    );
-    if (fIdx !== -1) {
-      fallbackCourses[fIdx] = {
-        ...fallbackCourses[fIdx],
-        title: title || fallbackCourses[fIdx].title,
-        description: description || fallbackCourses[fIdx].description,
-        price: Number(price || fallbackCourses[fIdx].price),
-        imageUrl: imageUrl || fallbackCourses[fIdx].imageUrl,
-        tags: tags || fallbackCourses[fIdx].tags
-      };
-    }
+    // 1. Update in-memory fallbackCourses array on the server FIRST for all matching entries
+    fallbackCourses.forEach((f, idx) => {
+      if (
+        f.id === id || 
+        f.id === targetUuid || 
+        f.title.toLowerCase().trim() === (title || '').toLowerCase().trim() ||
+        (title && f.title.toLowerCase().includes(title.toLowerCase().substring(0, 10)))
+      ) {
+        fallbackCourses[idx] = {
+          ...fallbackCourses[idx],
+          title: title || fallbackCourses[idx].title,
+          description: description !== undefined ? description : fallbackCourses[idx].description,
+          price: Number(price !== undefined ? price : fallbackCourses[idx].price),
+          imageUrl: imageUrl || fallbackCourses[idx].imageUrl,
+          tags: tags || fallbackCourses[idx].tags
+        };
+      }
+    });
 
     const supabase = getSupabase();
 
     if (supabase) {
-      const updateData = {
+      const coreUpdate = {
         title: title,
         description: description,
-        price: Number(price),
+        price: Number(price)
+      };
+
+      const extendedUpdate = {
+        ...coreUpdate,
         image_url: imageUrl,
         platform: platformTag,
         is_new: isNewTag
       };
 
-      // Multi-attempt matching to guarantee persistence regardless of Supabase primary key ID format
-      try { await supabase.from('courses').update(updateData).eq('id', id); } catch (e) {}
-      try { await supabase.from('courses').update(updateData).eq('id', targetUuid); } catch (e) {}
+      // 1. Core update (Guaranteed to work across all Supabase schemas)
+      try { await supabase.from('courses').update(coreUpdate).eq('id', id); } catch (e) {}
+      try { await supabase.from('courses').update(coreUpdate).eq('id', targetUuid); } catch (e) {}
       if (title) {
-        try { await supabase.from('courses').update(updateData).ilike('title', `%${title.substring(0, 10)}%`); } catch (e) {}
+        try { await supabase.from('courses').update(coreUpdate).ilike('title', `%${title.substring(0, 10)}%`); } catch (e) {}
       }
 
-      // Upsert fallback row with targetUuid
+      // 2. Extended update
+      try { await supabase.from('courses').update(extendedUpdate).eq('id', id); } catch (e) {}
+      try { await supabase.from('courses').update(extendedUpdate).eq('id', targetUuid); } catch (e) {}
+      if (title) {
+        try { await supabase.from('courses').update(extendedUpdate).ilike('title', `%${title.substring(0, 10)}%`); } catch (e) {}
+      }
+
+      // 3. Upsert fallback row with targetUuid
       try {
         await supabase.from('courses').upsert({
           id: targetUuid,
-          ...updateData
+          ...extendedUpdate
         });
       } catch (e) {}
     }
