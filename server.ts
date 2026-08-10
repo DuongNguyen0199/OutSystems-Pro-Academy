@@ -1065,9 +1065,12 @@ async function sendCustomEmail(toEmail: string, subject: string, htmlContent: st
       let fromAddress = "OutSystems Pro Academy <onboarding@resend.dev>";
       if (senderEmail && !senderEmail.endsWith("@gmail.com") && !senderEmail.endsWith("@yahoo.com") && !senderEmail.endsWith("@hotmail.com")) {
         fromAddress = `OutSystems Pro Academy <${senderEmail}>`;
+      } else if (senderEmail) {
+        const prefix = senderEmail.split("@")[0] || "support";
+        fromAddress = `OutSystems Pro Academy <${prefix}@outsystems-pro-academy.com>`;
       }
 
-      const res = await fetch("https://api.resend.com/emails", {
+      let res = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${apiKey}`,
@@ -1081,7 +1084,26 @@ async function sendCustomEmail(toEmail: string, subject: string, htmlContent: st
         })
       });
 
-      const data = await res.json();
+      let data = await res.json();
+
+      // If custom domain is not yet verified on Resend, fallback to onboarding@resend.dev
+      if (!res.ok && fromAddress !== "OutSystems Pro Academy <onboarding@resend.dev>") {
+        res = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${apiKey}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            from: "OutSystems Pro Academy <onboarding@resend.dev>",
+            to: [toEmail],
+            subject: subject,
+            html: htmlContent
+          })
+        });
+        data = await res.json();
+      }
+
       if (res.ok && data.id) {
         return { success: true };
       }
@@ -1089,11 +1111,11 @@ async function sendCustomEmail(toEmail: string, subject: string, htmlContent: st
       const resendErr = data.message || data.error || JSON.stringify(data);
       console.error("Resend API note:", resendErr);
 
-      // Special handling for Resend testing domain restriction (only allows sending to own registered email address)
+      // Special handling for Resend testing domain restriction
       if (typeof resendErr === 'string' && resendErr.includes("testing emails to your own email address")) {
         return {
           success: false,
-          error: `⚠️ Giới hạn tài khoản Resend Free: Bạn chưa xác thực Domain trên resend.com/domains nên Resend chỉ cho phép gửi mail thử nghiệm về email chính của bạn (${senderEmail}). Để gửi mail tới các email học viên khác (như ${toEmail}):\n1. Xác thực Domain trên resend.com/domains\n2. HOẶC tạo API Key miễn phí từ Brevo.com (Key có dạng xkeysib-...) dán vào tab Alerts & API để gửi mail tới mọi học viên!`
+          error: `⚠️ Giới hạn tài khoản Resend Free: Bạn chưa hoàn tất bấm nút Verify Domain trên resend.com cho domain outsystems-pro-academy.com nên Resend chỉ cho gửi mail thử nghiệm về email chính (${senderEmail}). Sau khi xác thực xong các bản ghi DNS, bạn sẽ gửi mail được tới MỌI học viên!`
         };
       }
 
