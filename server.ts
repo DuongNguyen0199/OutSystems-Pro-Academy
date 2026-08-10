@@ -628,6 +628,36 @@ app.post("/api/admin/codes/delete", requireAdminAuth, async (req, res) => {
   }
 });
 
+// Repair function to restore 11 distinct course titles & images in Supabase if overwritten
+async function repairSupabaseCoursesTable() {
+  const supabase = getSupabase();
+  if (!supabase) return;
+  try {
+    for (const course of fallbackCourses) {
+      const targetUuid = resolveCourseUuid(course.id);
+      const platformTag = course.tags?.find((t: any) => t.text === 'O11' || t.text === 'ODC')?.text || 'O11';
+      const isNewTag = course.tags?.some((t: any) => t.text === 'NEW') || false;
+
+      const rowPayload = {
+        id: targetUuid,
+        title: course.title,
+        description: course.description,
+        price: course.price,
+        image_url: course.imageUrl,
+        platform: platformTag,
+        is_new: isNewTag
+      };
+
+      await supabase.from('courses').upsert(rowPayload, { onConflict: 'id' });
+    }
+  } catch (e: any) {
+    console.error("Auto-repair courses table note:", e.message);
+  }
+}
+
+// Auto-repair on startup
+repairSupabaseCoursesTable();
+
 // Course Management Endpoint (Role: Admin ONLY)
 app.post("/api/admin/courses/upsert", requireAdminAuth, async (req, res) => {
   try {
@@ -636,24 +666,18 @@ app.post("/api/admin/courses/upsert", requireAdminAuth, async (req, res) => {
     const platformTag = tags?.find((t: any) => t.text === 'O11' || t.text === 'ODC')?.text || 'O11';
     const isNewTag = tags?.some((t: any) => t.text === 'NEW') || false;
 
-    // 1. Update in-memory fallbackCourses array on the server FIRST for all matching entries
-    fallbackCourses.forEach((f, idx) => {
-      if (
-        f.id === id || 
-        f.id === targetUuid || 
-        f.title.toLowerCase().trim() === (title || '').toLowerCase().trim() ||
-        (title && f.title.toLowerCase().includes(title.toLowerCase().substring(0, 10)))
-      ) {
-        fallbackCourses[idx] = {
-          ...fallbackCourses[idx],
-          title: title || fallbackCourses[idx].title,
-          description: description !== undefined ? description : fallbackCourses[idx].description,
-          price: Number(price !== undefined ? price : fallbackCourses[idx].price),
-          imageUrl: imageUrl || fallbackCourses[idx].imageUrl,
-          tags: tags || fallbackCourses[idx].tags
-        };
-      }
-    });
+    // 1. Update ONLY the target course in-memory on the server FIRST
+    const fIdx = fallbackCourses.findIndex(f => f.id === id || f.id === targetUuid);
+    if (fIdx !== -1) {
+      fallbackCourses[fIdx] = {
+        ...fallbackCourses[fIdx],
+        title: title || fallbackCourses[fIdx].title,
+        description: description !== undefined ? description : fallbackCourses[fIdx].description,
+        price: Number(price !== undefined ? price : fallbackCourses[fIdx].price),
+        imageUrl: imageUrl || fallbackCourses[fIdx].imageUrl,
+        tags: tags || fallbackCourses[fIdx].tags
+      };
+    }
 
     const supabase = getSupabase();
 
@@ -664,14 +688,6 @@ app.post("/api/admin/courses/upsert", requireAdminAuth, async (req, res) => {
         price: Number(price)
       };
 
-      // 1. Core update (Guaranteed to work across all Supabase schemas)
-      try { await supabase.from('courses').update(coreUpdate).eq('id', id); } catch (e) {}
-      try { await supabase.from('courses').update(coreUpdate).eq('id', targetUuid); } catch (e) {}
-      if (title) {
-        try { await supabase.from('courses').update(coreUpdate).ilike('title', `%${title.substring(0, 10)}%`); } catch (e) {}
-      }
-
-      // 2. Extended update with imageUrl, platform & is_new
       const extendedUpdate: Record<string, any> = {
         ...coreUpdate,
         platform: platformTag,
@@ -681,20 +697,20 @@ app.post("/api/admin/courses/upsert", requireAdminAuth, async (req, res) => {
         extendedUpdate.image_url = imageUrl;
       }
 
+      // STRICT ID MATCHING ONLY - Never match by title substring!
+      try { await supabase.from('courses').update(coreUpdate).eq('id', id); } catch (e) {}
+      try { await supabase.from('courses').update(coreUpdate).eq('id', targetUuid); } catch (e) {}
+
       try { await supabase.from('courses').update(extendedUpdate).eq('id', id); } catch (e) {}
       try { await supabase.from('courses').update(extendedUpdate).eq('id', targetUuid); } catch (e) {}
-      if (title) {
-        try { await supabase.from('courses').update(extendedUpdate).ilike('title', `%${title.substring(0, 10)}%`); } catch (e) {}
-      }
 
-      // 3. Upsert fallback row with targetUuid
+      // Fallback upsert with targetUuid
       try {
         await supabase.from('courses').upsert({
           id: targetUuid,
           ...extendedUpdate
         });
       } catch (e) {
-        // Fallback upsert core fields if extended fields fail due to schema constraints
         try {
           await supabase.from('courses').upsert({
             id: targetUuid,
@@ -715,7 +731,7 @@ async function syncCourseExamSetsToSupabase(supabase: any, courseId: string, tar
   if (!supabase) return;
   const fallbackObj = fallbackCourses.find(f => f.id === courseId || f.id === targetUuid) || fallbackCourses[0];
 
-  // 1. Update in-memory fallbackCourses on the server FIRST
+  // 1. Update ONLY the target course in-memory on the server FIRST
   const fIdx = fallbackCourses.findIndex(f => f.id === courseId || f.id === targetUuid);
   if (fIdx !== -1) {
     fallbackCourses[fIdx].examSets = examSets;
@@ -729,7 +745,7 @@ async function syncCourseExamSetsToSupabase(supabase: any, courseId: string, tar
   const allQuestions = examSets.flatMap(s => s.questions || []);
   const jsonQsStr = JSON.stringify(allQuestions);
 
-  // 2. Try array & JSON string payloads across id, targetUuid, and title matching
+  // 2. Try array & JSON string payloads across strict IDs ONLY
   const payloads = [
     { exam_sets: examSets },
     { exam_sets: jsonStr },
@@ -740,9 +756,6 @@ async function syncCourseExamSetsToSupabase(supabase: any, courseId: string, tar
   for (const p of payloads) {
     try { await supabase.from('courses').update(p).eq('id', courseId); } catch (e) {}
     try { await supabase.from('courses').update(p).eq('id', targetUuid); } catch (e) {}
-    if (fallbackObj && fallbackObj.title) {
-      try { await supabase.from('courses').update(p).ilike('title', `%${fallbackObj.title.substring(0, 10)}%`); } catch (e) {}
-    }
   }
 
   // 3. Fallback upsert
