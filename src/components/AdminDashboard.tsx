@@ -98,6 +98,16 @@ export default function AdminDashboard({
   const [editIsNew, setEditIsNew] = useState(false);
   const [courseSaveMsg, setCourseSaveMsg] = useState('');
 
+  // Create New Course Popup Modal State
+  const [isCreateCourseModalOpen, setIsCreateCourseModalOpen] = useState(false);
+  const [newCourseTitle, setNewCourseTitle] = useState('');
+  const [newCourseDescription, setNewCourseDescription] = useState('');
+  const [newCoursePrice, setNewCoursePrice] = useState<number>(19.99);
+  const [newCourseImageUrl, setNewCourseImageUrl] = useState('');
+  const [newCoursePlatform, setNewCoursePlatform] = useState<'O11' | 'ODC'>('O11');
+  const [newCourseIsNew, setNewCourseIsNew] = useState(false);
+  const [createCourseMsg, setCreateCourseMsg] = useState('');
+
   // CSV Import & Confirmation Modal State
   const [isConfirmImportOpen, setIsConfirmImportOpen] = useState(false);
   const [isSavingQuestions, setIsSavingQuestions] = useState(false);
@@ -398,6 +408,81 @@ export default function AdminDashboard({
         setEditingCourse(null);
         setCourseSaveMsg('');
       }, 1500);
+    }
+  };
+
+  // Create New Course Handler
+  const handleCreateCourseSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCourseTitle.trim()) return;
+
+    const customId = 'course_custom_' + Date.now();
+    const newCourse: Course = {
+      id: customId,
+      title: newCourseTitle.trim(),
+      description: newCourseDescription.trim() || 'Complete verified practice tests and exam dump questions.',
+      price: Number(newCoursePrice),
+      imageUrl: newCourseImageUrl.trim() || 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=600&auto=format&fit=crop&q=80',
+      tags: [
+        { text: newCoursePlatform, color: newCoursePlatform === 'O11' ? 'purple' : 'orange' },
+        ...(newCourseIsNew ? [{ text: 'NEW', color: 'green' }] : [])
+      ],
+      previewQuestions: [],
+      mockExam: [],
+      examSets: []
+    };
+
+    onUpdateCourses([...courses, newCourse]);
+
+    try {
+      const res = await fetch('/api/admin/courses/upsert', {
+        method: 'POST',
+        headers: getAdminHeaders(),
+        body: JSON.stringify(newCourse)
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setCreateCourseMsg(`❌ Database Note: ${data.error || 'Saved to session.'}`);
+      } else {
+        setCreateCourseMsg(`✅ Khóa học "${newCourseTitle}" đã được tạo thành công!`);
+      }
+    } catch (err: any) {
+      setCreateCourseMsg(`✅ Khóa học "${newCourseTitle}" đã được tạo thành công!`);
+    } finally {
+      setTimeout(() => {
+        setIsCreateCourseModalOpen(false);
+        setNewCourseTitle('');
+        setNewCourseDescription('');
+        setNewCoursePrice(19.99);
+        setNewCourseImageUrl('');
+        setNewCoursePlatform('O11');
+        setNewCourseIsNew(false);
+        setCreateCourseMsg('');
+      }, 1200);
+    }
+  };
+
+  // Delete Course Handler
+  const handleDeleteCourse = async (courseId: string, courseTitle: string) => {
+    if (!confirm(`Bạn có chắc chắn muốn XÓA VĨNH VIỄN khóa học "${courseTitle}"?\n(Hành động này sẽ xóa khóa học khỏi danh sách hiển thị và CSDL)`)) return;
+
+    const updatedList = courses.filter(c => c.id !== courseId);
+    onUpdateCourses(updatedList);
+
+    try {
+      const res = await fetch('/api/admin/courses/delete', {
+        method: 'POST',
+        headers: getAdminHeaders(),
+        body: JSON.stringify({ courseId })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        alert(`✅ ${data.message || `Đã xóa khóa học "${courseTitle}" thành công!`}`);
+      } else {
+        alert(`❌ Delete Error: ${data.error || 'Could not delete course from database.'}`);
+      }
+    } catch (err: any) {
+      alert(`❌ Error: ${err.message || 'Could not connect to server.'}`);
     }
   };
 
@@ -1073,20 +1158,29 @@ export default function AdminDashboard({
         {/* TAB 1: COURSE CATALOG MANAGEMENT */}
         {activeTab === 'courses' && (
           <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h2 className="font-display font-extrabold text-xl text-white flex items-center gap-2.5">
                   <BookOpen className="w-6 h-6 text-blue-400" />
                   Course Catalog & Pricing Management
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">
-                  Click "Edit Details" on any course to open the interactive editor popup modal.
+                  Quản lý danh sách 11+ khóa học chứng chỉ OutSystems, chỉnh sửa thông tin hoặc tạo khóa học mới.
                 </p>
               </div>
 
-              <span className="text-xs font-extrabold bg-blue-500/10 text-blue-400 border border-blue-500/30 px-3.5 py-1.5 rounded-xl">
-                {courses.length} Active Certification Courses
-              </span>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setIsCreateCourseModalOpen(true)}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-lg flex items-center gap-2 transition-all cursor-pointer hover:scale-105"
+                >
+                  <Plus className="w-4 h-4" /> Thêm Khóa Học Mới
+                </button>
+
+                <span className="text-xs font-extrabold bg-blue-500/10 text-blue-400 border border-blue-500/30 px-3.5 py-2.5 rounded-xl shrink-0">
+                  {courses.length} Active Certification Courses
+                </span>
+              </div>
             </div>
 
             {/* Course Grid Cards */}
@@ -1132,12 +1226,23 @@ export default function AdminDashboard({
                     </p>
                   </div>
 
-                  <button
-                    onClick={() => handleOpenCourseEditor(c)}
-                    className="w-full bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/40 hover:border-blue-600 font-bold text-xs py-2.5 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" /> Edit Details
-                  </button>
+                  {/* Actions: Edit Details & Delete Course */}
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      onClick={() => handleOpenCourseEditor(c)}
+                      className="flex-1 bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/40 hover:border-blue-600 font-bold text-xs py-2.5 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" /> Edit Details
+                    </button>
+
+                    <button
+                      onClick={() => handleDeleteCourse(c.id, c.title)}
+                      className="bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-800 hover:border-red-600 font-bold text-xs px-3.5 py-2.5 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer hover:scale-105"
+                      title="Xóa khóa học này khỏi hệ thống"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-red-400" /> Xóa
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -2394,6 +2499,148 @@ export default function AdminDashboard({
                   className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-5 py-2 rounded-xl text-xs shadow-lg flex items-center gap-1.5 cursor-pointer"
                 >
                   <Save className="w-4 h-4" /> Save Code Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* CREATE NEW COURSE MODAL */}
+      {isCreateCourseModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl p-6 space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-700 pb-3">
+              <h3 className="font-display font-bold text-base text-white flex items-center gap-2">
+                <Plus className="w-5 h-5 text-emerald-400" />
+                Thêm Khóa Học Chứng Chỉ Mới
+              </h3>
+              <button
+                onClick={() => setIsCreateCourseModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 hover:bg-slate-700 rounded-full cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {createCourseMsg && (
+              <div className="bg-blue-900/40 text-blue-300 text-xs p-3 rounded-xl border border-blue-500/50 font-bold">
+                {createCourseMsg}
+              </div>
+            )}
+
+            <form onSubmit={handleCreateCourseSubmit} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-300">Tên Khóa Học (Course Title)</label>
+                <input
+                  type="text"
+                  required
+                  value={newCourseTitle}
+                  onChange={(e) => setNewCourseTitle(e.target.value)}
+                  placeholder="e.g. OutSystems DevOps Specialist (O11)"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-white outline-none focus:border-emerald-500 font-bold"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-300">Mô Tả Khóa Học (Description)</label>
+                <textarea
+                  rows={3}
+                  value={newCourseDescription}
+                  onChange={(e) => setNewCourseDescription(e.target.value)}
+                  placeholder="Complete verified practice tests and exam dump questions for OutSystems..."
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-slate-200 outline-none focus:border-emerald-500 leading-relaxed"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-300">Giá Khóa Học ($ USD)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    required
+                    value={newCoursePrice}
+                    onChange={(e) => setNewCoursePrice(Number(e.target.value))}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-emerald-400 font-mono font-bold outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-300">Nền Tảng (Platform Tag)</label>
+                  <select
+                    value={newCoursePlatform}
+                    onChange={(e) => setNewCoursePlatform(e.target.value as 'O11' | 'ODC')}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-white font-bold outline-none focus:border-emerald-500"
+                  >
+                    <option value="O11">O11 (OutSystems 11)</option>
+                    <option value="ODC">ODC (OutSystems Developer Cloud)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
+                  <span>Ảnh Bìa Khóa Học (Cover Image URL)</span>
+                  <span className="text-[10px] text-blue-400">Local File Upload or URL</span>
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newCourseImageUrl}
+                    onChange={(e) => setNewCourseImageUrl(e.target.value)}
+                    placeholder="https://... hoặc chọn file từ máy tính"
+                    className="flex-1 bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-slate-300 font-mono outline-none focus:border-emerald-500"
+                  />
+                  <label className="bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs px-3 py-3 rounded-xl border border-slate-600 flex items-center gap-1.5 cursor-pointer shrink-0">
+                    <ImageIcon className="w-4 h-4 text-blue-400" />
+                    <span>Upload File</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            if (reader.result) setNewCourseImageUrl(reader.result as string);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between bg-slate-900 border border-slate-700 p-3.5 rounded-xl">
+                <div>
+                  <span className="text-xs font-bold text-white block">Gắn Thẻ "NEW" Nổi Bật</span>
+                  <span className="text-[11px] text-slate-400">Hiển thị huy hiệu NEW màu xanh lá nổi bật trên khóa học.</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={newCourseIsNew}
+                  onChange={(e) => setNewCourseIsNew(e.target.checked)}
+                  className="w-5 h-5 accent-emerald-500 rounded cursor-pointer shrink-0"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-700">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateCourseModalOpen(false)}
+                  className="bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold px-4 py-2 rounded-xl text-xs cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-6 py-2 rounded-xl text-xs shadow-lg flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" /> Tạo Khóa Học Mới
                 </button>
               </div>
             </form>

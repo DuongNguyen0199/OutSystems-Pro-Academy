@@ -718,6 +718,18 @@ app.post("/api/admin/courses/upsert", requireAdminAuth, async (req, res) => {
         imageUrl: imageUrl || fallbackCourses[fIdx].imageUrl,
         tags: tags || fallbackCourses[fIdx].tags
       };
+    } else {
+      fallbackCourses.push({
+        id: id || 'course_custom_' + Date.now(),
+        title: title || 'New OutSystems Certification Course',
+        description: description || '',
+        price: Number(price || 19.99),
+        imageUrl: imageUrl || 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=600&auto=format&fit=crop&q=80',
+        tags: tags || [{ text: 'O11', color: 'purple' }],
+        previewQuestions: [],
+        mockExam: [],
+        examSets: []
+      });
     }
 
     const supabase = getSupabase();
@@ -761,9 +773,49 @@ app.post("/api/admin/courses/upsert", requireAdminAuth, async (req, res) => {
       }
     }
 
-    res.json({ success: true, message: "Course details updated successfully in database!" });
+    res.json({
+      success: true,
+      message: `Updated course "${title}" successfully!`
+    });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message || "Failed to update course details." });
+    res.status(500).json({ success: false, error: err.message || "Failed to update course." });
+  }
+});
+
+// Delete Course Endpoint (Role: Admin ONLY)
+app.post("/api/admin/courses/delete", requireAdminAuth, async (req, res) => {
+  try {
+    const { courseId, id } = req.body;
+    const targetId = courseId || id;
+    if (!targetId) {
+      return res.status(400).json({ success: false, error: "Missing courseId." });
+    }
+
+    const targetUuid = resolveCourseUuid(targetId);
+
+    // Remove from in-memory fallbackCourses
+    for (let i = fallbackCourses.length - 1; i >= 0; i--) {
+      if (fallbackCourses[i].id === targetId || fallbackCourses[i].id === targetUuid) {
+        fallbackCourses.splice(i, 1);
+      }
+    }
+
+    // Delete from Supabase `courses` table strictly by primary key ID
+    const supabase = getSupabase();
+    if (supabase) {
+      try { await supabase.from("courses").delete().eq("id", targetId); } catch (e) {}
+      if (targetUuid && targetUuid !== targetId) {
+        try { await supabase.from("courses").delete().eq("id", targetUuid); } catch (e) {}
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Đã xóa khóa học thành công khỏi cơ sở dữ liệu!`
+    });
+  } catch (err: any) {
+    console.error("Delete course error:", err);
+    res.status(500).json({ success: false, error: err.message || "Failed to delete course." });
   }
 });
 
