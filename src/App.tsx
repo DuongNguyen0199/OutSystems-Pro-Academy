@@ -76,6 +76,19 @@ export default function App() {
     setUser(null);
   };
 
+  // Dynamic stats calculation from actual database courses list
+  const totalCoursesCount = coursesList.length;
+  const totalQuestionsCount = coursesList.reduce((sum, course) => {
+    let qCount = 0;
+    if (course.examSets && Array.isArray(course.examSets) && course.examSets.length > 0) {
+      qCount = course.examSets.reduce((acc: number, s: any) => acc + (s.questions?.length || 0), 0);
+    }
+    if (qCount === 0 && course.mockExam && Array.isArray(course.mockExam)) {
+      qCount = course.mockExam.length;
+    }
+    return sum + qCount;
+  }, 0);
+
   // Filter and sort courses alphabetically (A -> Z)
   const filteredCourses = [...coursesList]
     .sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }))
@@ -152,16 +165,18 @@ export default function App() {
             {/* Quick Stats Grid */}
             <div className="grid grid-cols-2 gap-3 w-full lg:w-auto shrink-0 font-sans">
               <div className="bg-slate-800/80 backdrop-blur-xs border border-slate-700/80 p-3.5 rounded-2xl text-center space-y-1">
-                <span className="font-display font-extrabold text-xl text-blue-400">11</span>
+                <span className="font-display font-extrabold text-xl text-blue-400">{totalCoursesCount}</span>
                 <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">Cert Courses</p>
               </div>
               <div className="bg-slate-800/80 backdrop-blur-xs border border-slate-700/80 p-3.5 rounded-2xl text-center space-y-1">
-                <span className="font-display font-extrabold text-xl text-emerald-400">1,800+</span>
+                <span className="font-display font-extrabold text-xl text-emerald-400">
+                  {totalQuestionsCount > 0 ? `${totalQuestionsCount.toLocaleString()}+` : '1,800+'}
+                </span>
                 <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">Exam Questions</p>
               </div>
               <div className="bg-slate-800/80 backdrop-blur-xs border border-slate-700/80 p-3.5 rounded-2xl text-center space-y-1">
-                <span className="font-display font-extrabold text-xl text-amber-400">100%</span>
-                <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">Pass Rate</p>
+                <span className="font-display font-extrabold text-xl text-amber-400">24/7</span>
+                <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">Access & Support</p>
               </div>
               <div className="bg-slate-800/80 backdrop-blur-xs border border-slate-700/80 p-3.5 rounded-2xl text-center space-y-1">
                 <span className="font-display font-extrabold text-xl text-purple-400">O11 & ODC</span>
