@@ -1027,29 +1027,78 @@ async function sendTelegramAlert(message: string): Promise<boolean> {
   }
 }
 
-// Helper function to send custom HTML email via Nodemailer Gmail Transport (IPv4 forced for Render compatibility)
+// Helper function to send custom HTML email via Resend API (HTTPS Port 443)
 async function sendCustomEmail(toEmail: string, subject: string, htmlContent: string): Promise<{ success: boolean; error?: string }> {
-  const senderEmail = (notificationSettings.adminEmail || process.env.ADMIN_EMAIL || process.env.GMAIL_USER || "duongrbt@gmail.com").trim();
+  const apiKey = (notificationSettings.resendApiKey || notificationSettings.emailApiKey || process.env.RESEND_API_KEY || "").trim();
+  const senderEmail = (notificationSettings.adminEmail || process.env.ADMIN_EMAIL || "duongrbt@gmail.com").trim();
+
+  // 1. PRIMARY DISPATCHER: RESEND HTTP API (PORT 443 HTTPS - GUARANTEED FOR RENDER CLOUD)
+  if (apiKey) {
+    try {
+      // If using custom domain, use senderEmail; otherwise fallback to Resend's default onboarding sender
+      let fromAddress = "OutSystems Pro Academy <onboarding@resend.dev>";
+      if (senderEmail && !senderEmail.endsWith("@gmail.com") && !senderEmail.endsWith("@yahoo.com") && !senderEmail.endsWith("@hotmail.com")) {
+        fromAddress = `OutSystems Pro Academy <${senderEmail}>`;
+      }
+
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          from: fromAddress,
+          to: [toEmail],
+          subject: subject,
+          html: htmlContent
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.id) {
+        return { success: true };
+      }
+
+      const resendErr = data.message || data.error || JSON.stringify(data);
+      console.error("Resend API error:", resendErr);
+      return {
+        success: false,
+        error: `Lỗi Resend API: ${typeof resendErr === 'object' ? JSON.stringify(resendErr) : resendErr}`
+      };
+    } catch (e: any) {
+      console.error("Resend fetch error:", e.message);
+      return {
+        success: false,
+        error: `Không thể kết nối tới Resend API: ${e.message}`
+      };
+    }
+  }
+
+  // 2. FALLBACK DISPATCHER: GMAIL SMTP
   const pass = (notificationSettings.gmailAppPassword || process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASSWORD || "").replace(/\s+/g, "");
 
-  if (!senderEmail || !pass) {
+  if (!apiKey && !pass) {
     return {
       success: false,
-      error: "Chưa cấu hình Admin Gmail Address hoặc Gmail App Password trong tab Alerts & API."
+      error: "Chưa nhập Resend API Key trong tab Alerts & API. Vui lòng dán Resend API Key (dạng re_...) để kích hoạt gửi email!"
     };
   }
 
-  // Attempt 1: Port 587 STARTTLS with IPv4 forced (bypasses Render IPv6 ENETUNREACH error)
   try {
+    let ipv4Host = "smtp.gmail.com";
+    try {
+      const dnsPromises = require("dns").promises;
+      const ips = await dnsPromises.resolve4("smtp.gmail.com");
+      if (ips && ips.length > 0) ipv4Host = ips[0];
+    } catch (e) {}
+
     const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
+      host: ipv4Host,
       port: 587,
       secure: false,
-      family: 4, // FORCE IPv4 ONLY
-      auth: {
-        user: senderEmail,
-        pass: pass
-      },
+      tls: { servername: "smtp.gmail.com", rejectUnauthorized: false },
+      auth: { user: senderEmail, pass: pass },
       connectionTimeout: 10000
     });
 
@@ -1062,37 +1111,10 @@ async function sendCustomEmail(toEmail: string, subject: string, htmlContent: st
 
     return { success: true };
   } catch (err1: any) {
-    console.error("Port 587 IPv4 Gmail note:", err1.message);
-
-    // Attempt 2: Port 465 SSL with IPv4 forced
-    try {
-      const transporter465 = nodemailer.createTransport({
-        host: "smtp.gmail.com",
-        port: 465,
-        secure: true,
-        family: 4, // FORCE IPv4 ONLY
-        auth: {
-          user: senderEmail,
-          pass: pass
-        },
-        connectionTimeout: 10000
-      });
-
-      await transporter465.sendMail({
-        from: `"OutSystems Pro Academy" <${senderEmail}>`,
-        to: toEmail,
-        subject: subject,
-        html: htmlContent
-      });
-
-      return { success: true };
-    } catch (err2: any) {
-      console.error("Port 465 IPv4 Gmail error:", err2.message);
-      return { 
-        success: false, 
-        error: `Lỗi kết nối Gmail SMTP: ${err2.message || err1.message}` 
-      };
-    }
+    return {
+      success: false,
+      error: `Gửi mail thất bại: Vui lòng dán Resend API Key (re_...) vào tab Alerts & API.`
+    };
   }
 }
 
@@ -1287,7 +1309,10 @@ async function loadNotificationSettingsFromSupabase() {
         if (item.key === 'gmail_app_password') notificationSettings.gmailAppPassword = item.value;
         if (item.key === 'telegram_bot_token') notificationSettings.telegramBotToken = item.value;
         if (item.key === 'telegram_chat_id') notificationSettings.telegramChatId = item.value;
-        if (item.key === 'email_api_key') notificationSettings.emailApiKey = item.value;
+        if (item.key === 'email_api_key' || item.key === 'resend_api_key') {
+          notificationSettings.emailApiKey = item.value;
+          (notificationSettings as any).resendApiKey = item.value;
+        }
       });
     }
   } catch (e: any) {
@@ -1299,19 +1324,22 @@ loadNotificationSettingsFromSupabase();
 
 const handleGetSettings = async (req: express.Request, res: express.Response) => {
   await loadNotificationSettingsFromSupabase();
+  const apiKey = (notificationSettings as any).resendApiKey || notificationSettings.emailApiKey || "";
   res.json({
     success: true,
     adminEmail: notificationSettings.adminEmail,
     gmailAppPassword: notificationSettings.gmailAppPassword,
     telegramBotToken: notificationSettings.telegramBotToken,
     telegramChatId: notificationSettings.telegramChatId,
-    emailApiKey: notificationSettings.emailApiKey,
+    emailApiKey: apiKey,
+    resendApiKey: apiKey,
     settings: {
       adminEmail: notificationSettings.adminEmail,
       gmailAppPassword: notificationSettings.gmailAppPassword,
       telegramBotToken: notificationSettings.telegramBotToken,
       telegramChatId: notificationSettings.telegramChatId,
-      emailApiKey: notificationSettings.emailApiKey
+      emailApiKey: apiKey,
+      resendApiKey: apiKey
     }
   });
 };
@@ -1321,13 +1349,17 @@ app.get("/api/admin/settings", requireAdminAuth, handleGetSettings);
 
 const handleSaveSettings = async (req: express.Request, res: express.Response) => {
   try {
-    const { adminEmail, gmailAppPassword, telegramBotToken, telegramChatId, emailApiKey } = req.body;
+    const { adminEmail, gmailAppPassword, telegramBotToken, telegramChatId, emailApiKey, resendApiKey } = req.body;
+    const finalApiKey = (resendApiKey || emailApiKey || "").trim();
 
     if (adminEmail !== undefined) notificationSettings.adminEmail = (adminEmail || "").trim();
     if (gmailAppPassword !== undefined) notificationSettings.gmailAppPassword = (gmailAppPassword || "").trim();
     if (telegramBotToken !== undefined) notificationSettings.telegramBotToken = (telegramBotToken || "").trim();
     if (telegramChatId !== undefined) notificationSettings.telegramChatId = (telegramChatId || "").trim();
-    if (emailApiKey !== undefined) notificationSettings.emailApiKey = (emailApiKey || "").trim();
+    if (finalApiKey) {
+      notificationSettings.emailApiKey = finalApiKey;
+      (notificationSettings as any).resendApiKey = finalApiKey;
+    }
 
     const supabase = getSupabase();
     if (supabase) {
@@ -1336,7 +1368,8 @@ const handleSaveSettings = async (req: express.Request, res: express.Response) =
         { key: "gmail_app_password", value: notificationSettings.gmailAppPassword, updated_at: new Date().toISOString() },
         { key: "telegram_bot_token", value: notificationSettings.telegramBotToken, updated_at: new Date().toISOString() },
         { key: "telegram_chat_id", value: notificationSettings.telegramChatId, updated_at: new Date().toISOString() },
-        { key: "email_api_key", value: notificationSettings.emailApiKey, updated_at: new Date().toISOString() }
+        { key: "resend_api_key", value: finalApiKey, updated_at: new Date().toISOString() },
+        { key: "email_api_key", value: finalApiKey, updated_at: new Date().toISOString() }
       ];
       const { error } = await supabase.from("system_settings").upsert(payload, { onConflict: "key" });
       if (error) {
@@ -1346,7 +1379,7 @@ const handleSaveSettings = async (req: express.Request, res: express.Response) =
 
     res.json({
       success: true,
-      message: "Notification & API settings saved successfully to Supabase database!"
+      message: "Resend & Notification settings saved successfully to database!"
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message || "Failed to save settings." });
@@ -1360,20 +1393,20 @@ app.post("/api/admin/test-email", requireAdminAuth, async (req, res) => {
   const targetEmail = req.body?.email || notificationSettings.adminEmail || process.env.ADMIN_EMAIL || "duongrbt@gmail.com";
   const result = await sendCustomEmail(
     targetEmail,
-    "[OutSystems Pro Academy] Test Gmail Alert",
-    `<div style="font-family: Arial; padding: 25px; color: #f8fafc; background-color: #0f172a; border-radius: 12px;">
-       <h2 style="color: #38bdf8; margin-top: 0;">🎉 Kiểm Tra Gửi Email Thành Công!</h2>
-       <p style="color: #cbd5e1;">Chức năng gửi email tự động từ hệ thống OutSystems Pro Academy hoạt động hoàn hảo!</p>
-       <p style="color: #94a3b8; font-size: 12px; margin-top: 20px;">Email người gửi: ${notificationSettings.adminEmail || 'Gmail System'}</p>
+    "[OutSystems Pro Academy] Test Resend Alert",
+    `<div style="font-family: Arial; padding: 25px; color: #f8fafc; background-color: #0f172a; border-radius: 12px; border: 1px solid #1e293b;">
+       <h2 style="color: #38bdf8; margin-top: 0;">🚀 Kiểm Tra Gửi Mail Resend Thành Công!</h2>
+       <p style="color: #cbd5e1;">Chức năng gửi email tự động qua Resend API (Port 443 HTTPS) của OutSystems Pro Academy đã hoạt động hoàn hảo!</p>
+       <p style="color: #94a3b8; font-size: 12px; margin-top: 20px;">Email người nhận: <strong>${targetEmail}</strong></p>
      </div>`
   );
 
   if (result.success) {
-    res.json({ success: true, message: `Gửi email thử nghiệm tới ${targetEmail} thành công!` });
+    res.json({ success: true, message: `🎉 Đã gửi mail qua Resend tới ${targetEmail} thành công!` });
   } else {
     res.status(400).json({ 
       success: false, 
-      message: `Gửi email thất bại: ${result.error || 'Vui lòng kiểm tra lại cấu hình Gmail App Password trong tab Alerts & API.'}` 
+      message: `Gửi email thất bại: ${result.error || 'Vui lòng kiểm tra lại Resend API Key trong tab Alerts & API.'}` 
     });
   }
 });

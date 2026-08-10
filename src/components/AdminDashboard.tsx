@@ -1919,54 +1919,62 @@ export default function AdminDashboard({
 
               <form onSubmit={handleSaveNotificationSettings} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Gmail Settings */}
+                  {/* Resend Email API Settings */}
                   <div className="bg-slate-900 p-5 rounded-2xl border border-slate-700 space-y-4">
-                    <h3 className="font-display font-bold text-sm text-white flex items-center gap-2">
-                      <Mail className="w-4 h-4 text-red-400" /> Gmail SMTP Configuration
-                    </h3>
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-display font-bold text-sm text-white flex items-center gap-2">
+                        <Mail className="w-4 h-4 text-emerald-400" /> Resend API Email Service
+                      </h3>
+                      <span className="bg-emerald-950 text-emerald-300 border border-emerald-800 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full">
+                        HTTPS Port 443
+                      </span>
+                    </div>
+
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-300">Admin Gmail Address</label>
+                      <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
+                        <span>Resend API Key</span>
+                        <a href="https://resend.com/api-keys" target="_blank" rel="noreferrer" className="text-[10px] text-blue-400 underline font-bold">
+                          Lấy Key từ Resend.com ↗
+                        </a>
+                      </label>
+                      <input
+                        type="password"
+                        required
+                        value={emailApiKey}
+                        onChange={(e) => setEmailApiKey(e.target.value)}
+                        placeholder="e.g. re_123456789..."
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-emerald-400 font-mono outline-none focus:border-emerald-500 font-bold"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
+                        <span>Admin / Notification Email Address</span>
+                        <span className="text-[10px] text-slate-500">Email nhận thông báo hệ thống</span>
+                      </label>
                       <input
                         type="email"
                         value={adminEmailSetting}
                         onChange={(e) => setAdminEmailSetting(e.target.value)}
+                        placeholder="e.g. duongrbt@gmail.com"
                         className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white font-mono outline-none focus:border-blue-500"
                       />
                     </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-300">Gmail App Password (16 chars)</label>
-                      <input
-                        type="password"
-                        value={gmailAppPassword}
-                        onChange={(e) => setGmailAppPassword(e.target.value)}
-                        placeholder="e.g. abcd efgh ijkl mnop"
-                        className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white font-mono outline-none focus:border-blue-500"
-                      />
+
+                    <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-[11px] text-slate-400 leading-relaxed space-y-1">
+                      <p className="font-bold text-slate-300">💡 Hướng dẫn gửi mail bằng Resend:</p>
+                      <p>• Dán API Key bắt đầu bằng <strong>re_...</strong> từ Resend vào ô trên.</p>
+                      <p>• Gửi thông báo & mã kích hoạt tức thì qua Port 443 HTTPS (Không bị giới hạn bởi Render Cloud).</p>
                     </div>
-                    <div className="space-y-1.5 pt-2 border-t border-slate-800">
-                      <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
-                        <span>Resend / Brevo API Key (Bypass SMTP)</span>
-                        <span className="text-[10px] text-emerald-400 font-mono font-bold">HTTPS Port 443</span>
-                      </label>
-                      <input
-                        type="password"
-                        value={emailApiKey}
-                        onChange={(e) => setEmailApiKey(e.target.value)}
-                        placeholder="e.g. re_123456789... or xkeysib-..."
-                        className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white font-mono outline-none focus:border-emerald-500"
-                      />
-                      <p className="text-[10px] text-slate-400 leading-relaxed">
-                        Nếu Render chặn cổng SMTP 587/465, bạn có thể dán API Key miễn phí từ <a href="https://resend.com" target="_blank" rel="noreferrer" className="text-blue-400 underline font-bold">Resend.com</a> (re_...) hoặc <a href="https://brevo.com" target="_blank" rel="noreferrer" className="text-blue-400 underline font-bold">Brevo.com</a> (xkeysib-...). Gửi qua Port 443 HTTPS hoạt động 100%!
-                      </p>
-                    </div>
+
                     <button
                       type="button"
                       onClick={handleTestEmail}
                       disabled={testingEmail}
-                      className="w-full bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold py-2.5 rounded-xl cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+                      className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-2.5 rounded-xl cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg transition-all"
                     >
-                      <Send className="w-3.5 h-3.5 text-blue-400" />
-                      <span>{testingEmail ? 'Sending...' : 'Test Email Notification'}</span>
+                      <Send className="w-3.5 h-3.5" />
+                      <span>{testingEmail ? 'Sending...' : 'Test Resend Notification'}</span>
                     </button>
                   </div>
 
