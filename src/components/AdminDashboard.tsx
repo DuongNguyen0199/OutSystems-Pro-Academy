@@ -109,6 +109,7 @@ export default function AdminDashboard({
   const [gmailAppPassword, setGmailAppPassword] = useState('');
   const [telegramBotToken, setTelegramBotToken] = useState('');
   const [telegramChatId, setTelegramChatId] = useState('');
+  const [emailApiKey, setEmailApiKey] = useState('');
   const [notifStatusMsg, setNotifStatusMsg] = useState('');
   const [testingTelegram, setTestingTelegram] = useState(false);
   const [testingEmail, setTestingEmail] = useState(false);
@@ -228,6 +229,7 @@ export default function AdminDashboard({
           if (data.gmailAppPassword) setGmailAppPassword(data.gmailAppPassword);
           if (data.telegramBotToken) setTelegramBotToken(data.telegramBotToken);
           if (data.telegramChatId) setTelegramChatId(data.telegramChatId);
+          if (data.emailApiKey) setEmailApiKey(data.emailApiKey);
         }
       })
       .catch(() => {});
@@ -412,6 +414,7 @@ export default function AdminDashboard({
           gmailAppPassword: gmailAppPassword,
           telegramBotToken: telegramBotToken,
           telegramChatId: telegramChatId,
+          emailApiKey: emailApiKey
         })
       });
 
@@ -1940,6 +1943,22 @@ export default function AdminDashboard({
                         className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white font-mono outline-none focus:border-blue-500"
                       />
                     </div>
+                    <div className="space-y-1.5 pt-2 border-t border-slate-800">
+                      <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
+                        <span>Resend / Brevo API Key (Bypass SMTP)</span>
+                        <span className="text-[10px] text-emerald-400 font-mono font-bold">HTTPS Port 443</span>
+                      </label>
+                      <input
+                        type="password"
+                        value={emailApiKey}
+                        onChange={(e) => setEmailApiKey(e.target.value)}
+                        placeholder="e.g. re_123456789... or xkeysib-..."
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white font-mono outline-none focus:border-emerald-500"
+                      />
+                      <p className="text-[10px] text-slate-400 leading-relaxed">
+                        Nếu Render chặn cổng SMTP 587/465, bạn có thể dán API Key miễn phí từ <a href="https://resend.com" target="_blank" rel="noreferrer" className="text-blue-400 underline font-bold">Resend.com</a> (re_...) hoặc <a href="https://brevo.com" target="_blank" rel="noreferrer" className="text-blue-400 underline font-bold">Brevo.com</a> (xkeysib-...). Gửi qua Port 443 HTTPS hoạt động 100%!
+                      </p>
+                    </div>
                     <button
                       type="button"
                       onClick={handleTestEmail}
@@ -1947,7 +1966,7 @@ export default function AdminDashboard({
                       className="w-full bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold py-2.5 rounded-xl cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
                     >
                       <Send className="w-3.5 h-3.5 text-blue-400" />
-                      <span>{testingEmail ? 'Sending...' : 'Test Gmail Alert'}</span>
+                      <span>{testingEmail ? 'Sending...' : 'Test Email Notification'}</span>
                     </button>
                   </div>
 

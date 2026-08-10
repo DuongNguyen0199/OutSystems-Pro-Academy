@@ -93,7 +93,8 @@ const notificationSettings = {
   adminEmail: process.env.ADMIN_EMAIL || "duongrbt@gmail.com",
   gmailAppPassword: process.env.GMAIL_APP_PASSWORD || "",
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || "",
-  telegramChatId: process.env.TELEGRAM_CHAT_ID || ""
+  telegramChatId: process.env.TELEGRAM_CHAT_ID || "",
+  emailApiKey: process.env.RESEND_API_KEY || process.env.BREVO_API_KEY || ""
 };
 
 // Course fetching endpoint (Item 4: Alphabetical A -> Z sorting for all roles)
@@ -1286,6 +1287,7 @@ async function loadNotificationSettingsFromSupabase() {
         if (item.key === 'gmail_app_password') notificationSettings.gmailAppPassword = item.value;
         if (item.key === 'telegram_bot_token') notificationSettings.telegramBotToken = item.value;
         if (item.key === 'telegram_chat_id') notificationSettings.telegramChatId = item.value;
+        if (item.key === 'email_api_key') notificationSettings.emailApiKey = item.value;
       });
     }
   } catch (e: any) {
@@ -1303,11 +1305,13 @@ const handleGetSettings = async (req: express.Request, res: express.Response) =>
     gmailAppPassword: notificationSettings.gmailAppPassword,
     telegramBotToken: notificationSettings.telegramBotToken,
     telegramChatId: notificationSettings.telegramChatId,
+    emailApiKey: notificationSettings.emailApiKey,
     settings: {
       adminEmail: notificationSettings.adminEmail,
       gmailAppPassword: notificationSettings.gmailAppPassword,
       telegramBotToken: notificationSettings.telegramBotToken,
-      telegramChatId: notificationSettings.telegramChatId
+      telegramChatId: notificationSettings.telegramChatId,
+      emailApiKey: notificationSettings.emailApiKey
     }
   });
 };
@@ -1317,12 +1321,13 @@ app.get("/api/admin/settings", requireAdminAuth, handleGetSettings);
 
 const handleSaveSettings = async (req: express.Request, res: express.Response) => {
   try {
-    const { adminEmail, gmailAppPassword, telegramBotToken, telegramChatId } = req.body;
+    const { adminEmail, gmailAppPassword, telegramBotToken, telegramChatId, emailApiKey } = req.body;
 
     if (adminEmail !== undefined) notificationSettings.adminEmail = (adminEmail || "").trim();
     if (gmailAppPassword !== undefined) notificationSettings.gmailAppPassword = (gmailAppPassword || "").trim();
     if (telegramBotToken !== undefined) notificationSettings.telegramBotToken = (telegramBotToken || "").trim();
     if (telegramChatId !== undefined) notificationSettings.telegramChatId = (telegramChatId || "").trim();
+    if (emailApiKey !== undefined) notificationSettings.emailApiKey = (emailApiKey || "").trim();
 
     const supabase = getSupabase();
     if (supabase) {
@@ -1330,7 +1335,8 @@ const handleSaveSettings = async (req: express.Request, res: express.Response) =
         { key: "admin_email", value: notificationSettings.adminEmail, updated_at: new Date().toISOString() },
         { key: "gmail_app_password", value: notificationSettings.gmailAppPassword, updated_at: new Date().toISOString() },
         { key: "telegram_bot_token", value: notificationSettings.telegramBotToken, updated_at: new Date().toISOString() },
-        { key: "telegram_chat_id", value: notificationSettings.telegramChatId, updated_at: new Date().toISOString() }
+        { key: "telegram_chat_id", value: notificationSettings.telegramChatId, updated_at: new Date().toISOString() },
+        { key: "email_api_key", value: notificationSettings.emailApiKey, updated_at: new Date().toISOString() }
       ];
       const { error } = await supabase.from("system_settings").upsert(payload, { onConflict: "key" });
       if (error) {
