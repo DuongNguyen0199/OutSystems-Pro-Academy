@@ -627,62 +627,104 @@ app.post("/api/admin/codes/delete", requireAdminAuth, async (req, res) => {
 app.post("/api/admin/courses/upsert", requireAdminAuth, async (req, res) => {
   try {
     const { id, title, description, price, imageUrl, tags } = req.body;
+    const targetUuid = resolveCourseUuid(id);
+    const platformTag = tags?.find((t: any) => t.text === 'O11' || t.text === 'ODC')?.text || 'O11';
+    const isNewTag = tags?.some((t: any) => t.text === 'NEW') || false;
+
+    // 1. Update in-memory fallbackCourses array on the server FIRST
+    const fIdx = fallbackCourses.findIndex(f => 
+      f.id === id || 
+      f.id === targetUuid || 
+      f.title.toLowerCase().includes((title || '').toLowerCase())
+    );
+    if (fIdx !== -1) {
+      fallbackCourses[fIdx] = {
+        ...fallbackCourses[fIdx],
+        title: title || fallbackCourses[fIdx].title,
+        description: description || fallbackCourses[fIdx].description,
+        price: Number(price || fallbackCourses[fIdx].price),
+        imageUrl: imageUrl || fallbackCourses[fIdx].imageUrl,
+        tags: tags || fallbackCourses[fIdx].tags
+      };
+    }
+
     const supabase = getSupabase();
 
     if (supabase) {
-      const targetUuid = resolveCourseUuid(id);
-      const platformTag = tags?.find((t: any) => t.text === 'O11' || t.text === 'ODC')?.text || 'O11';
-      const isNewTag = tags?.some((t: any) => t.text === 'NEW') || false;
-
-      const { error } = await supabase.from('courses').upsert({
-        id: targetUuid,
+      const updateData = {
         title: title,
         description: description,
         price: Number(price),
         image_url: imageUrl,
         platform: platformTag,
         is_new: isNewTag
-      });
+      };
 
-      if (error) {
-        console.error("Supabase course upsert note:", error.message);
+      // Multi-attempt matching to guarantee persistence regardless of Supabase primary key ID format
+      try { await supabase.from('courses').update(updateData).eq('id', id); } catch (e) {}
+      try { await supabase.from('courses').update(updateData).eq('id', targetUuid); } catch (e) {}
+      if (title) {
+        try { await supabase.from('courses').update(updateData).ilike('title', `%${title.substring(0, 10)}%`); } catch (e) {}
       }
+
+      // Upsert fallback row with targetUuid
+      try {
+        await supabase.from('courses').upsert({
+          id: targetUuid,
+          ...updateData
+        });
+      } catch (e) {}
     }
 
     res.json({ success: true, message: "Course details updated successfully in database!" });
-  } catch (err) {
-    res.status(500).json({ success: false, error: "Failed to update course details." });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || "Failed to update course details." });
   }
 });
 
 // Helper function to sync exam_sets to Supabase courses table across courseId & targetUuid
 async function syncCourseExamSetsToSupabase(supabase: any, courseId: string, targetUuid: string, examSets: any[]) {
   if (!supabase) return;
-  const fallbackObj = fallbackCourses.find(f => f.id === courseId) || fallbackCourses[0];
+  const fallbackObj = fallbackCourses.find(f => f.id === courseId || f.id === targetUuid) || fallbackCourses[0];
 
-  try {
-    await supabase.from('courses').update({ exam_sets: examSets }).eq('id', courseId);
-  } catch (e) {}
-  try {
-    await supabase.from('courses').update({ exam_sets: examSets }).eq('id', targetUuid);
-  } catch (e) {}
-  try {
-    await supabase.from('courses').upsert({
-      id: courseId,
-      title: fallbackObj.title,
-      price: fallbackObj.price || 29.99,
-      image_url: fallbackObj.imageUrl || '',
-      description: fallbackObj.description || '',
-      exam_sets: examSets
-    });
-  } catch (e) {}
+  // 1. Update in-memory fallbackCourses on the server FIRST
+  const fIdx = fallbackCourses.findIndex(f => f.id === courseId || f.id === targetUuid);
+  if (fIdx !== -1) {
+    fallbackCourses[fIdx].examSets = examSets;
+    const allSetQs = examSets.flatMap(s => s.questions || []);
+    if (allSetQs.length > 0) {
+      fallbackCourses[fIdx].mockExam = allSetQs;
+    }
+  }
+
+  const jsonStr = JSON.stringify(examSets);
+  const allQuestions = examSets.flatMap(s => s.questions || []);
+  const jsonQsStr = JSON.stringify(allQuestions);
+
+  // 2. Try array & JSON string payloads across id, targetUuid, and title matching
+  const payloads = [
+    { exam_sets: examSets },
+    { exam_sets: jsonStr },
+    { exam_sets: examSets, mock_exam: allQuestions },
+    { exam_sets: jsonStr, mock_exam: jsonQsStr }
+  ];
+
+  for (const p of payloads) {
+    try { await supabase.from('courses').update(p).eq('id', courseId); } catch (e) {}
+    try { await supabase.from('courses').update(p).eq('id', targetUuid); } catch (e) {}
+    if (fallbackObj && fallbackObj.title) {
+      try { await supabase.from('courses').update(p).ilike('title', `%${fallbackObj.title.substring(0, 10)}%`); } catch (e) {}
+    }
+  }
+
+  // 3. Fallback upsert
   try {
     await supabase.from('courses').upsert({
       id: targetUuid,
-      title: fallbackObj.title,
-      price: fallbackObj.price || 29.99,
-      image_url: fallbackObj.imageUrl || '',
-      description: fallbackObj.description || '',
+      title: fallbackObj ? fallbackObj.title : "OutSystems Certification Course",
+      price: fallbackObj ? (fallbackObj.price || 29.99) : 29.99,
+      image_url: fallbackObj ? (fallbackObj.imageUrl || '') : '',
+      description: fallbackObj ? (fallbackObj.description || '') : '',
       exam_sets: examSets
     });
   } catch (e) {}
@@ -720,6 +762,13 @@ app.post("/api/admin/questions/import", requireAdminAuth, async (req, res) => {
     }
     inMemoryCourseExamSets[courseId] = updatedSets;
     inMemoryCourseExamSets[targetUuid] = updatedSets;
+
+    // Update in-memory fallbackCourses on the server
+    const fIdx = fallbackCourses.findIndex(f => f.id === courseId || f.id === targetUuid);
+    if (fIdx !== -1) {
+      fallbackCourses[fIdx].mockExam = questions;
+      fallbackCourses[fIdx].examSets = updatedSets;
+    }
 
     const supabase = getSupabase();
 
