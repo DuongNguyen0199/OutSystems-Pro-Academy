@@ -1932,25 +1932,30 @@ export default function AdminDashboard({
 
                     <div className="space-y-1.5">
                       <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
-                        <span>Resend API Key</span>
-                        <a href="https://resend.com/api-keys" target="_blank" rel="noreferrer" className="text-[10px] text-blue-400 underline font-bold">
-                          Lấy Key từ Resend.com ↗
-                        </a>
+                        <span>Resend API Key (re_...) hoặc Brevo API Key (xkeysib-...)</span>
+                        <div className="flex items-center gap-2">
+                          <a href="https://resend.com/api-keys" target="_blank" rel="noreferrer" className="text-[10px] text-blue-400 underline font-bold">
+                            Resend ↗
+                          </a>
+                          <a href="https://app.brevo.com/settings/keys/api" target="_blank" rel="noreferrer" className="text-[10px] text-emerald-400 underline font-bold">
+                            Brevo ↗
+                          </a>
+                        </div>
                       </label>
                       <input
                         type="password"
                         required
                         value={emailApiKey}
                         onChange={(e) => setEmailApiKey(e.target.value)}
-                        placeholder="e.g. re_123456789..."
+                        placeholder="e.g. re_123456789... hoặc xkeysib-..."
                         className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-emerald-400 font-mono outline-none focus:border-emerald-500 font-bold"
                       />
                     </div>
 
                     <div className="space-y-1.5">
                       <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
-                        <span>Admin / Notification Email Address</span>
-                        <span className="text-[10px] text-slate-500">Email nhận thông báo hệ thống</span>
+                        <span>Admin Email Address</span>
+                        <span className="text-[10px] text-slate-500">Email đăng ký Resend / nhận thông báo</span>
                       </label>
                       <input
                         type="email"
@@ -1962,9 +1967,9 @@ export default function AdminDashboard({
                     </div>
 
                     <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-[11px] text-slate-400 leading-relaxed space-y-1">
-                      <p className="font-bold text-slate-300">💡 Hướng dẫn gửi mail bằng Resend:</p>
-                      <p>• Dán API Key bắt đầu bằng <strong>re_...</strong> từ Resend vào ô trên.</p>
-                      <p>• Gửi thông báo & mã kích hoạt tức thì qua Port 443 HTTPS (Không bị giới hạn bởi Render Cloud).</p>
+                      <p className="font-bold text-slate-300">💡 Hướng dẫn gửi mail thành công 100%:</p>
+                      <p>• <strong>Resend Free (re_...):</strong> Nếu chưa add Domain tại resend.com/domains thì Resend chỉ cho gửi về email chính ({adminEmailSetting}). Muốn gửi tới email học viên ngẫu nhiên, bạn hãy thêm Domain trên Resend.</p>
+                      <p>• <strong>Brevo Free (xkeysib-...):</strong> Không cần Domain, dán Brevo API Key vào đây sẽ gửi được tới MỌI email học viên ngay lập tức!</p>
                     </div>
 
                     <button

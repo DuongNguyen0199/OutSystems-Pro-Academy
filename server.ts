@@ -1027,15 +1027,41 @@ async function sendTelegramAlert(message: string): Promise<boolean> {
   }
 }
 
-// Helper function to send custom HTML email via Resend API (HTTPS Port 443)
+// Helper function to send custom HTML email via Resend API / Brevo API (HTTPS Port 443)
 async function sendCustomEmail(toEmail: string, subject: string, htmlContent: string): Promise<{ success: boolean; error?: string }> {
-  const apiKey = (notificationSettings.resendApiKey || notificationSettings.emailApiKey || process.env.RESEND_API_KEY || "").trim();
+  const apiKey = (notificationSettings.resendApiKey || notificationSettings.emailApiKey || process.env.RESEND_API_KEY || process.env.BREVO_API_KEY || "").trim();
   const senderEmail = (notificationSettings.adminEmail || process.env.ADMIN_EMAIL || "duongrbt@gmail.com").trim();
 
-  // 1. PRIMARY DISPATCHER: RESEND HTTP API (PORT 443 HTTPS - GUARANTEED FOR RENDER CLOUD)
+  // 1. BREVO API (xkeysib-...) DISPATCHER - PORT 443 HTTPS (No Domain Verification Required for External Recipients)
+  if (apiKey.startsWith("xkeysib-")) {
+    try {
+      const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+        method: "POST",
+        headers: {
+          "api-key": apiKey,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          sender: { name: "OutSystems Pro Academy", email: senderEmail },
+          to: [{ email: toEmail }],
+          subject: subject,
+          htmlContent: htmlContent
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok) return { success: true };
+
+      const brevoErr = data.message || JSON.stringify(data);
+      return { success: false, error: `Lỗi Brevo API: ${brevoErr}` };
+    } catch (e: any) {
+      return { success: false, error: `Không thể kết nối Brevo API: ${e.message}` };
+    }
+  }
+
+  // 2. RESEND API (re_...) DISPATCHER - PORT 443 HTTPS
   if (apiKey) {
     try {
-      // If using custom domain, use senderEmail; otherwise fallback to Resend's default onboarding sender
       let fromAddress = "OutSystems Pro Academy <onboarding@resend.dev>";
       if (senderEmail && !senderEmail.endsWith("@gmail.com") && !senderEmail.endsWith("@yahoo.com") && !senderEmail.endsWith("@hotmail.com")) {
         fromAddress = `OutSystems Pro Academy <${senderEmail}>`;
@@ -1061,7 +1087,16 @@ async function sendCustomEmail(toEmail: string, subject: string, htmlContent: st
       }
 
       const resendErr = data.message || data.error || JSON.stringify(data);
-      console.error("Resend API error:", resendErr);
+      console.error("Resend API note:", resendErr);
+
+      // Special handling for Resend testing domain restriction (only allows sending to own registered email address)
+      if (typeof resendErr === 'string' && resendErr.includes("testing emails to your own email address")) {
+        return {
+          success: false,
+          error: `⚠️ Giới hạn tài khoản Resend Free: Bạn chưa xác thực Domain trên resend.com/domains nên Resend chỉ cho phép gửi mail thử nghiệm về email chính của bạn (${senderEmail}). Để gửi mail tới các email học viên khác (như ${toEmail}):\n1. Xác thực Domain trên resend.com/domains\n2. HOẶC tạo API Key miễn phí từ Brevo.com (Key có dạng xkeysib-...) dán vào tab Alerts & API để gửi mail tới mọi học viên!`
+        };
+      }
+
       return {
         success: false,
         error: `Lỗi Resend API: ${typeof resendErr === 'object' ? JSON.stringify(resendErr) : resendErr}`
@@ -1075,13 +1110,13 @@ async function sendCustomEmail(toEmail: string, subject: string, htmlContent: st
     }
   }
 
-  // 2. FALLBACK DISPATCHER: GMAIL SMTP
+  // 3. FALLBACK DISPATCHER: GMAIL SMTP
   const pass = (notificationSettings.gmailAppPassword || process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASSWORD || "").replace(/\s+/g, "");
 
   if (!apiKey && !pass) {
     return {
       success: false,
-      error: "Chưa nhập Resend API Key trong tab Alerts & API. Vui lòng dán Resend API Key (dạng re_...) để kích hoạt gửi email!"
+      error: "Chưa nhập API Key trong tab Alerts & API. Vui lòng dán Resend API Key (re_...) hoặc Brevo API Key (xkeysib-...) để gửi mail!"
     };
   }
 
