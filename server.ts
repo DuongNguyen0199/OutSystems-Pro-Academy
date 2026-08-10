@@ -1026,7 +1026,7 @@ async function sendTelegramAlert(message: string): Promise<boolean> {
   }
 }
 
-// Helper function to send custom HTML email via Nodemailer Gmail Transport
+// Helper function to send custom HTML email via Nodemailer Gmail Transport (IPv4 forced for Render compatibility)
 async function sendCustomEmail(toEmail: string, subject: string, htmlContent: string): Promise<{ success: boolean; error?: string }> {
   const senderEmail = (notificationSettings.adminEmail || process.env.ADMIN_EMAIL || process.env.GMAIL_USER || "duongrbt@gmail.com").trim();
   const pass = (notificationSettings.gmailAppPassword || process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASSWORD || "").replace(/\s+/g, "");
@@ -1038,13 +1038,18 @@ async function sendCustomEmail(toEmail: string, subject: string, htmlContent: st
     };
   }
 
+  // Attempt 1: Port 587 STARTTLS with IPv4 forced (bypasses Render IPv6 ENETUNREACH error)
   try {
     const transporter = nodemailer.createTransport({
-      service: "gmail",
+      host: "smtp.gmail.com",
+      port: 587,
+      secure: false,
+      family: 4, // FORCE IPv4 ONLY
       auth: {
         user: senderEmail,
         pass: pass
-      }
+      },
+      connectionTimeout: 10000
     });
 
     await transporter.sendMail({
@@ -1055,9 +1060,38 @@ async function sendCustomEmail(toEmail: string, subject: string, htmlContent: st
     });
 
     return { success: true };
-  } catch (err: any) {
-    console.error("Nodemailer dispatch error:", err);
-    return { success: false, error: err.message || "Failed to send email via Gmail SMTP." };
+  } catch (err1: any) {
+    console.error("Port 587 IPv4 Gmail note:", err1.message);
+
+    // Attempt 2: Port 465 SSL with IPv4 forced
+    try {
+      const transporter465 = nodemailer.createTransport({
+        host: "smtp.gmail.com",
+        port: 465,
+        secure: true,
+        family: 4, // FORCE IPv4 ONLY
+        auth: {
+          user: senderEmail,
+          pass: pass
+        },
+        connectionTimeout: 10000
+      });
+
+      await transporter465.sendMail({
+        from: `"OutSystems Pro Academy" <${senderEmail}>`,
+        to: toEmail,
+        subject: subject,
+        html: htmlContent
+      });
+
+      return { success: true };
+    } catch (err2: any) {
+      console.error("Port 465 IPv4 Gmail error:", err2.message);
+      return { 
+        success: false, 
+        error: `Lỗi kết nối Gmail SMTP: ${err2.message || err1.message}` 
+      };
+    }
   }
 }
 
