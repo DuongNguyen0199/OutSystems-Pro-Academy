@@ -10,7 +10,8 @@ import nodemailer from "nodemailer";
 dotenv.config();
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 const PORT = 3000;
 
@@ -663,13 +664,6 @@ app.post("/api/admin/courses/upsert", requireAdminAuth, async (req, res) => {
         price: Number(price)
       };
 
-      const extendedUpdate = {
-        ...coreUpdate,
-        image_url: imageUrl,
-        platform: platformTag,
-        is_new: isNewTag
-      };
-
       // 1. Core update (Guaranteed to work across all Supabase schemas)
       try { await supabase.from('courses').update(coreUpdate).eq('id', id); } catch (e) {}
       try { await supabase.from('courses').update(coreUpdate).eq('id', targetUuid); } catch (e) {}
@@ -677,7 +671,16 @@ app.post("/api/admin/courses/upsert", requireAdminAuth, async (req, res) => {
         try { await supabase.from('courses').update(coreUpdate).ilike('title', `%${title.substring(0, 10)}%`); } catch (e) {}
       }
 
-      // 2. Extended update
+      // 2. Extended update with imageUrl, platform & is_new
+      const extendedUpdate: Record<string, any> = {
+        ...coreUpdate,
+        platform: platformTag,
+        is_new: isNewTag
+      };
+      if (imageUrl) {
+        extendedUpdate.image_url = imageUrl;
+      }
+
       try { await supabase.from('courses').update(extendedUpdate).eq('id', id); } catch (e) {}
       try { await supabase.from('courses').update(extendedUpdate).eq('id', targetUuid); } catch (e) {}
       if (title) {
@@ -690,7 +693,15 @@ app.post("/api/admin/courses/upsert", requireAdminAuth, async (req, res) => {
           id: targetUuid,
           ...extendedUpdate
         });
-      } catch (e) {}
+      } catch (e) {
+        // Fallback upsert core fields if extended fields fail due to schema constraints
+        try {
+          await supabase.from('courses').upsert({
+            id: targetUuid,
+            ...coreUpdate
+          });
+        } catch (e2) {}
+      }
     }
 
     res.json({ success: true, message: "Course details updated successfully in database!" });

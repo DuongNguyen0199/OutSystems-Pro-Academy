@@ -330,14 +330,18 @@ export default function AdminDashboard({
         body: JSON.stringify(updatedCourse)
       });
       const data = await res.json();
-      setCourseSaveMsg(data.message || 'Course updated successfully!');
-    } catch (err) {
-      setCourseSaveMsg('Course updated in local session.');
+      if (!res.ok || !data.success) {
+        setCourseSaveMsg(`❌ Database Note: ${data.error || data.message || 'Server error while saving to database.'}`);
+      } else {
+        setCourseSaveMsg(`✅ ${data.message || 'Course updated successfully in database!'}`);
+      }
+    } catch (err: any) {
+      setCourseSaveMsg(`❌ Error: ${err.message || 'Could not connect to server.'}`);
     } finally {
       setTimeout(() => {
         setEditingCourse(null);
         setCourseSaveMsg('');
-      }, 1000);
+      }, 1500);
     }
   };
 
