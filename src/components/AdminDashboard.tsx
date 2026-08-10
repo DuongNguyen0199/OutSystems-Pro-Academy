@@ -119,8 +119,62 @@ export default function AdminDashboard({
   const [editCodeStr, setEditCodeStr] = useState('');
   const [editCodeEmail, setEditCodeEmail] = useState('');
   const [editCodeCourseId, setEditCodeCourseId] = useState('');
-  const [editCodeStatus, setEditCodeStatus] = useState<'active' | 'revoked'>('active');
   const [codeSearchQuery, setCodeSearchQuery] = useState('');
+  const [sendingMailCodeId, setSendingMailCodeId] = useState<string | null>(null);
+
+  // Send Email with Activation Code to Student (Item 2)
+  const handleSendCodeEmail = async (codeObj: ActivationCode) => {
+    setSendingMailCodeId(codeObj.id);
+    try {
+      const res = await fetch('/api/admin/codes/send-email', {
+        method: 'POST',
+        headers: getAdminHeaders(),
+        body: JSON.stringify({
+          code: codeObj.code,
+          email: codeObj.userEmail,
+          courseId: codeObj.courseId
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        alert(`❌ Send Mail Error: ${data.error || 'Failed to send email.'}`);
+      } else {
+        alert(`✅ ${data.message || `Đã gửi mã kích hoạt ${codeObj.code} thành công tới ${codeObj.userEmail}!`}`);
+      }
+    } catch (err: any) {
+      alert(`❌ Error: ${err.message || 'Could not send email.'}`);
+    } finally {
+      setSendingMailCodeId(null);
+    }
+  };
+
+  // Re-Generate Code & Send Automatic Email (Item 2)
+  const handleRegenerateCode = async (codeObj: ActivationCode) => {
+    if (!confirm(`Bạn có chắc chắn muốn TẠO MỚI mã code cho học viên "${codeObj.userEmail}"?\n(Mã cũ ${codeObj.code} sẽ bị thay thế bằng mã mới)`)) return;
+
+    try {
+      const res = await fetch('/api/admin/codes/regenerate', {
+        method: 'POST',
+        headers: getAdminHeaders(),
+        body: JSON.stringify({
+          id: codeObj.id,
+          oldCode: codeObj.code,
+          email: codeObj.userEmail,
+          courseId: codeObj.courseId
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        alert(`❌ Regenerate Error: ${data.error || 'Failed to regenerate code.'}`);
+      } else {
+        const newCode = data.newCode;
+        setActivationCodes(prev => prev.map(c => c.id === codeObj.id ? { ...c, code: newCode } : c));
+        alert(`✅ ${data.message || `Đã cấp mã mới (${newCode}) và gửi email tới ${codeObj.userEmail}!`}`);
+      }
+    } catch (err: any) {
+      alert(`❌ Error: ${err.message || 'Could not regenerate code.'}`);
+    }
+  };
 
   const getAdminHeaders = () => {
     const savedUser = localStorage.getItem('outsystems_user');
@@ -1433,27 +1487,28 @@ export default function AdminDashboard({
                               </div>
                             </div>
 
-                            {/* CRUD Actions: Edit, Revoke, Delete */}
+                            {/* Actions: Re-Generate Code, Send Mail, Delete */}
                             <div className="flex items-center gap-1.5 shrink-0">
                               <button
-                                onClick={() => handleOpenEditCodeModal(c)}
-                                className="bg-blue-950/80 hover:bg-blue-900 text-blue-300 border border-blue-800 text-[11px] font-bold px-2.5 py-1.5 rounded-xl flex items-center gap-1 cursor-pointer"
-                                title="Edit Code Details"
+                                onClick={() => handleRegenerateCode(c)}
+                                className="bg-blue-950/80 hover:bg-blue-900 text-blue-300 border border-blue-800 text-[11px] font-bold px-2.5 py-1.5 rounded-xl flex items-center gap-1 cursor-pointer transition-all hover:scale-105"
+                                title="Tạo lại mã kích hoạt mới"
                               >
-                                <Edit2 className="w-3.5 h-3.5 text-blue-400" /> Edit
+                                <RefreshCw className="w-3.5 h-3.5 text-blue-400" /> Re-Generate Code
                               </button>
 
                               <button
-                                onClick={() => handleResetUserCode(c.userEmail, c.courseId)}
-                                className="bg-amber-950/80 hover:bg-amber-900 text-amber-300 border border-amber-800 text-[11px] font-bold px-2.5 py-1.5 rounded-xl flex items-center gap-1 cursor-pointer"
-                                title="Revoke Access"
+                                onClick={() => handleSendCodeEmail(c)}
+                                disabled={sendingMailCodeId === c.id}
+                                className="bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-800 text-[11px] font-bold px-2.5 py-1.5 rounded-xl flex items-center gap-1 cursor-pointer transition-all hover:scale-105 disabled:opacity-50"
+                                title="Gửi mã code tới email học viên"
                               >
-                                <RotateCcw className="w-3.5 h-3.5 text-amber-400" /> Revoke
+                                <Send className="w-3.5 h-3.5 text-emerald-400" /> {sendingMailCodeId === c.id ? 'Sending...' : 'Send Mail'}
                               </button>
 
                               <button
                                 onClick={() => handleDeleteCode(c.id, c.code)}
-                                className="bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-800 text-[11px] font-bold px-2.5 py-1.5 rounded-xl flex items-center gap-1 cursor-pointer"
+                                className="bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-800 text-[11px] font-bold px-2.5 py-1.5 rounded-xl flex items-center gap-1 cursor-pointer transition-all hover:scale-105"
                                 title="Delete Code Record"
                               >
                                 <Trash2 className="w-3.5 h-3.5 text-red-400" /> Delete

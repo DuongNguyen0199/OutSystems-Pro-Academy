@@ -412,6 +412,7 @@ app.get("/api/admin/users", requireAdminAuth, async (req, res) => {
   }
 });
 
+// CREATE USER ACCOUNT ENDPOINT WITH AUTOMATIC WELCOME EMAIL (Item 1)
 app.post("/api/admin/users/create", requireAdminAuth, async (req, res) => {
   try {
     const { email, password, fullName, role } = req.body;
@@ -448,7 +449,46 @@ app.post("/api/admin/users/create", requireAdminAuth, async (req, res) => {
       }
     }
 
-    res.json({ success: true, message: `Registered user account "${newUser.email}" successfully in Supabase database!`, user: newUser });
+    // Send Automatic Welcome Email to Student
+    const websiteUrl = req.headers.origin || "https://outsystems-pro-academy.onrender.com";
+    const welcomeHtml = `
+<div style="font-family: Arial, sans-serif; background-color: #0f172a; padding: 30px; color: #f8fafc;">
+  <div style="max-width: 600px; margin: 0 auto; background-color: #1e293b; border-radius: 16px; padding: 25px; border: 1px solid #334155;">
+    <h2 style="color: #38bdf8; margin-top: 0; font-size: 22px;">🎓 OutSystems Pro Academy</h2>
+    <p style="color: #e2e8f0; font-size: 15px;">Xin chào <strong>${newUser.fullName || newUser.email}</strong>,</p>
+    <p style="color: #cbd5e1; font-size: 14px; line-height: 1.6;">Tài khoản của bạn đã được khởi tạo thành công trên hệ thống luyện thi chứng chỉ OutSystems Pro Academy. Dưới đây là thông tin đăng nhập của bạn:</p>
+    
+    <div style="background-color: #0f172a; padding: 18px; border-radius: 12px; margin: 20px 0; border: 1px solid #334155;">
+      <p style="margin: 6px 0; color: #e2e8f0; font-size: 14px;"><strong>Tài khoản (Email):</strong> <span style="color: #38bdf8; font-weight: bold;">${newUser.email}</span></p>
+      <p style="margin: 6px 0; color: #e2e8f0; font-size: 14px;"><strong>Mật khẩu (Password):</strong> <span style="color: #f43f5e; font-weight: bold; font-family: monospace; font-size: 16px;">${password}</span></p>
+      <p style="margin: 6px 0; color: #e2e8f0; font-size: 14px;"><strong>Vai trò (Role):</strong> ${role === 'admin' ? 'Quản trị viên (Admin)' : 'Học viên (Student)'}</p>
+    </div>
+
+    <p style="color: #cbd5e1; font-size: 14px;">Truy cập trang web để đăng nhập và bắt đầu làm bài thi thử:</p>
+    <div style="text-align: center; margin: 25px 0;">
+      <a href="${websiteUrl}" style="background-color: #2563eb; color: #ffffff; padding: 12px 26px; text-decoration: none; border-radius: 10px; font-weight: bold; font-size: 14px; display: inline-block; box-shadow: 0 4px 12px rgba(37,99,235,0.4);">👉 Đăng Nhập OutSystems Pro Academy</a>
+    </div>
+    
+    <hr style="border: 0; border-top: 1px solid #334155; margin: 25px 0;" />
+    <p style="font-size: 12px; color: #94a3b8; margin: 0;">Trân trọng,<br><strong>Đội ngũ OutSystems Pro Academy</strong><br><a href="${websiteUrl}" style="color: #38bdf8; text-decoration: none;">${websiteUrl}</a></p>
+  </div>
+</div>`;
+
+    const mailRes = await sendCustomEmail(
+      newUser.email,
+      "[OutSystems Pro Academy] Thông tin tài khoản đăng nhập của bạn",
+      welcomeHtml
+    );
+
+    res.json({ 
+      success: true, 
+      message: mailRes.success 
+        ? `Khởi tạo tài khoản cho "${newUser.email}" thành công & Đã gửi email tự động!`
+        : `Khởi tạo tài khoản cho "${newUser.email}" thành công! (Lưu ý email: ${mailRes.error})`, 
+      user: newUser,
+      emailSent: mailRes.success,
+      emailError: mailRes.error
+    });
   } catch (err: any) {
     console.error("Register user error:", err);
     res.status(500).json({ success: false, error: err.message || "Failed to register user." });
@@ -986,28 +1026,219 @@ async function sendTelegramAlert(message: string): Promise<boolean> {
   }
 }
 
-async function sendAdminEmailAlert(subject: string, textBody: string): Promise<boolean> {
-  if (!notificationSettings.adminEmail || !notificationSettings.gmailAppPassword) return false;
+// Helper function to send custom HTML email via Nodemailer Gmail Transport
+async function sendCustomEmail(toEmail: string, subject: string, htmlContent: string): Promise<{ success: boolean; error?: string }> {
+  const senderEmail = (notificationSettings.adminEmail || process.env.ADMIN_EMAIL || process.env.GMAIL_USER || "duongrbt@gmail.com").trim();
+  const pass = (notificationSettings.gmailAppPassword || process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASSWORD || "").replace(/\s+/g, "");
+
+  if (!senderEmail || !pass) {
+    return {
+      success: false,
+      error: "Chưa cấu hình Admin Gmail Address hoặc Gmail App Password trong tab Alerts & API."
+    };
+  }
+
   try {
     const transporter = nodemailer.createTransport({
       service: "gmail",
       auth: {
-        user: notificationSettings.adminEmail,
-        pass: notificationSettings.gmailAppPassword.replace(/\s+/g, "")
+        user: senderEmail,
+        pass: pass
       }
     });
 
     await transporter.sendMail({
-      from: `"OutSystems Academy Alert" <${notificationSettings.adminEmail}>`,
-      to: notificationSettings.adminEmail,
+      from: `"OutSystems Pro Academy" <${senderEmail}>`,
+      to: toEmail,
       subject: subject,
-      text: textBody
+      html: htmlContent
     });
-    return true;
-  } catch (e) {
-    return false;
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("Nodemailer dispatch error:", err);
+    return { success: false, error: err.message || "Failed to send email via Gmail SMTP." };
   }
 }
+
+async function sendAdminEmailAlert(subject: string, textBody: string): Promise<boolean> {
+  const res = await sendCustomEmail(
+    notificationSettings.adminEmail || "duongrbt@gmail.com",
+    subject,
+    `<div style="font-family: Arial; padding: 20px; color: #f8fafc; background: #0f172a; border-radius: 12px;"><h3 style="color: #38bdf8;">${subject}</h3><p>${textBody}</p></div>`
+  );
+  return res.success;
+}
+
+// ENDPOINT: SEND ACTIVATION CODE EMAIL TO STUDENT (Item 2)
+app.post("/api/admin/codes/send-email", requireAdminAuth, async (req, res) => {
+  try {
+    const { code, email, courseId } = req.body;
+    if (!code || !email) {
+      return res.status(400).json({ success: false, error: "Missing code or email address." });
+    }
+
+    const targetUuid = resolveCourseUuid(courseId || '');
+    const courseObj = fallbackCourses.find(c => c.id === courseId || c.id === targetUuid) || fallbackCourses[0];
+    const courseTitle = courseObj ? courseObj.title : "OutSystems Certification Course";
+    const websiteUrl = req.headers.origin || "https://outsystems-pro-academy.onrender.com";
+
+    const codeHtml = `
+<div style="font-family: Arial, sans-serif; background-color: #0f172a; padding: 30px; color: #f8fafc;">
+  <div style="max-width: 600px; margin: 0 auto; background-color: #1e293b; border-radius: 16px; padding: 25px; border: 1px solid #334155;">
+    <h2 style="color: #38bdf8; margin-top: 0; font-size: 22px;">🔑 Mã Kích Hoạt Khóa Học OutSystems</h2>
+    <p style="color: #e2e8f0; font-size: 15px;">Xin chào <strong>${email}</strong>,</p>
+    <p style="color: #cbd5e1; font-size: 14px; line-height: 1.6;">Dưới đây là thông tin mã kích hoạt làm bài thi thử chứng chỉ OutSystems dành cho bạn:</p>
+    
+    <div style="background-color: #0f172a; padding: 18px; border-radius: 12px; margin: 20px 0; border: 1px solid #334155;">
+      <p style="margin: 6px 0; color: #e2e8f0; font-size: 14px;"><strong>Tài khoản (Email):</strong> <span style="color: #38bdf8; font-weight: bold;">${email}</span></p>
+      <p style="margin: 6px 0; color: #e2e8f0; font-size: 14px;"><strong>Khóa học đã đăng ký:</strong> <strong style="color: #fbbf24;">${courseTitle}</strong></p>
+      <p style="margin: 14px 0 6px 0; color: #e2e8f0; font-size: 14px;"><strong>Mã kích hoạt (Activation Code):</strong></p>
+      <div style="background-color: #064e3b; color: #34d399; font-size: 22px; font-family: monospace; font-weight: bold; padding: 14px; border-radius: 8px; text-align: center; letter-spacing: 3px; border: 1px solid #059669;">
+        ${code}
+      </div>
+    </div>
+
+    <p style="color: #cbd5e1; font-size: 14px;"><strong>Hướng dẫn sử dụng:</strong></p>
+    <ol style="color: #cbd5e1; line-height: 1.6; font-size: 14px; padding-left: 20px;">
+      <li>Truy cập website: <a href="${websiteUrl}" style="color: #38bdf8; text-decoration: underline;">${websiteUrl}</a></li>
+      <li>Đăng nhập bằng tài khoản email: <strong>${email}</strong></li>
+      <li>Vào khóa học <strong>${courseTitle}</strong> và nhập mã <strong>${code}</strong> để mở khóa bài thi thử!</li>
+    </ol>
+
+    <div style="text-align: center; margin: 25px 0;">
+      <a href="${websiteUrl}" style="background-color: #10b981; color: #ffffff; padding: 12px 26px; text-decoration: none; border-radius: 10px; font-weight: bold; font-size: 14px; display: inline-block; box-shadow: 0 4px 12px rgba(16,185,129,0.4);">🚀 Bắt đầu làm bài thi thử ngay</a>
+    </div>
+
+    <hr style="border: 0; border-top: 1px solid #334155; margin: 25px 0;" />
+    <p style="font-size: 12px; color: #94a3b8; margin: 0;">Trân trọng,<br><strong>Đội ngũ OutSystems Pro Academy</strong><br><a href="${websiteUrl}" style="color: #38bdf8; text-decoration: none;">${websiteUrl}</a></p>
+  </div>
+</div>`;
+
+    const mailRes = await sendCustomEmail(
+      email,
+      `[OutSystems Pro Academy] Mã kích hoạt (${code}) - ${courseTitle}`,
+      codeHtml
+    );
+
+    if (mailRes.success) {
+      res.json({ success: true, message: `Đã gửi mã kích hoạt ${code} tới email ${email} thành công!` });
+    } else {
+      res.status(400).json({ success: false, error: mailRes.error || "Gửi email thất bại." });
+    }
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || "Failed to send code email." });
+  }
+});
+
+// ENDPOINT: RE-GENERATE ACTIVATION CODE & SEND EMAIL (Item 2)
+app.post("/api/admin/codes/regenerate", requireAdminAuth, async (req, res) => {
+  try {
+    const { id, oldCode, email, courseId } = req.body;
+    if (!email || !courseId) {
+      return res.status(400).json({ success: false, error: "Missing email or courseId." });
+    }
+
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let randomPart = '';
+    for (let i = 0; i < 10; i++) {
+      randomPart += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    const newCode = `OS${randomPart}`;
+
+    let updatedInMemory = false;
+    for (let i = 0; i < memoryActivationCodes.length; i++) {
+      if (
+        (id && memoryActivationCodes[i].id === id) ||
+        (oldCode && memoryActivationCodes[i].code === oldCode) ||
+        (memoryActivationCodes[i].userEmail.toLowerCase() === email.toLowerCase() && memoryActivationCodes[i].courseId === courseId)
+      ) {
+        memoryActivationCodes[i].code = newCode;
+        memoryActivationCodes[i].status = 'active';
+        updatedInMemory = true;
+        break;
+      }
+    }
+
+    if (!updatedInMemory) {
+      memoryActivationCodes.unshift({
+        id: id || 'code_' + Date.now(),
+        code: newCode,
+        userEmail: email.trim().toLowerCase(),
+        courseId: courseId,
+        status: 'active',
+        createdAt: new Date().toISOString()
+      });
+    }
+
+    const supabase = getSupabase();
+    if (supabase) {
+      const targetUuid = resolveCourseUuid(courseId);
+      if (oldCode) {
+        await supabase.from('enrollments').update({ activation_code: newCode, updated_at: new Date().toISOString() }).eq('activation_code', oldCode);
+      }
+      if (id) {
+        await supabase.from('enrollments').update({ activation_code: newCode, updated_at: new Date().toISOString() }).eq('id', id);
+      }
+      await supabase.from('enrollments').update({ activation_code: newCode, updated_at: new Date().toISOString() }).eq('user_email', email.trim().toLowerCase()).eq('course_id', targetUuid);
+    }
+
+    const targetUuid = resolveCourseUuid(courseId);
+    const courseObj = fallbackCourses.find(c => c.id === courseId || c.id === targetUuid) || fallbackCourses[0];
+    const courseTitle = courseObj ? courseObj.title : "OutSystems Certification Course";
+    const websiteUrl = req.headers.origin || "https://outsystems-pro-academy.onrender.com";
+
+    const codeHtml = `
+<div style="font-family: Arial, sans-serif; background-color: #0f172a; padding: 30px; color: #f8fafc;">
+  <div style="max-width: 600px; margin: 0 auto; background-color: #1e293b; border-radius: 16px; padding: 25px; border: 1px solid #334155;">
+    <h2 style="color: #38bdf8; margin-top: 0; font-size: 22px;">🔄 Mã Kích Hoạt Mới (Re-Generated Code)</h2>
+    <p style="color: #e2e8f0; font-size: 15px;">Xin chào <strong>${email}</strong>,</p>
+    <p style="color: #cbd5e1; font-size: 14px; line-height: 1.6;">Hệ thống vừa cập nhật tạo mới mã kích hoạt làm bài thi thử OutSystems dành cho bạn (Mã cũ đã được hủy):</p>
+    
+    <div style="background-color: #0f172a; padding: 18px; border-radius: 12px; margin: 20px 0; border: 1px solid #334155;">
+      <p style="margin: 6px 0; color: #e2e8f0; font-size: 14px;"><strong>Tài khoản (Email):</strong> <span style="color: #38bdf8; font-weight: bold;">${email}</span></p>
+      <p style="margin: 6px 0; color: #e2e8f0; font-size: 14px;"><strong>Khóa học đã đăng ký:</strong> <strong style="color: #fbbf24;">${courseTitle}</strong></p>
+      <p style="margin: 14px 0 6px 0; color: #e2e8f0; font-size: 14px;"><strong>Mã kích hoạt MỚI (New Activation Code):</strong></p>
+      <div style="background-color: #064e3b; color: #34d399; font-size: 22px; font-family: monospace; font-weight: bold; padding: 14px; border-radius: 8px; text-align: center; letter-spacing: 3px; border: 1px solid #059669;">
+        ${newCode}
+      </div>
+    </div>
+
+    <p style="color: #cbd5e1; font-size: 14px;"><strong>Hướng dẫn sử dụng:</strong></p>
+    <ol style="color: #cbd5e1; line-height: 1.6; font-size: 14px; padding-left: 20px;">
+      <li>Truy cập website: <a href="${websiteUrl}" style="color: #38bdf8; text-decoration: underline;">${websiteUrl}</a></li>
+      <li>Đăng nhập bằng tài khoản email: <strong>${email}</strong></li>
+      <li>Nhập mã mới <strong>${newCode}</strong> để kích hoạt bài thi thử!</li>
+    </ol>
+
+    <div style="text-align: center; margin: 25px 0;">
+      <a href="${websiteUrl}" style="background-color: #10b981; color: #ffffff; padding: 12px 26px; text-decoration: none; border-radius: 10px; font-weight: bold; font-size: 14px; display: inline-block; box-shadow: 0 4px 12px rgba(16,185,129,0.4);">🚀 Bắt đầu làm bài thi thử ngay</a>
+    </div>
+
+    <hr style="border: 0; border-top: 1px solid #334155; margin: 25px 0;" />
+    <p style="font-size: 12px; color: #94a3b8; margin: 0;">Trân trọng,<br><strong>Đội ngũ OutSystems Pro Academy</strong><br><a href="${websiteUrl}" style="color: #38bdf8; text-decoration: none;">${websiteUrl}</a></p>
+  </div>
+</div>`;
+
+    const mailRes = await sendCustomEmail(
+      email,
+      `[OutSystems Pro Academy] Mã kích hoạt mới (${newCode}) - ${courseTitle}`,
+      codeHtml
+    );
+
+    res.json({
+      success: true,
+      newCode: newCode,
+      message: mailRes.success 
+        ? `Đã cấp mã mới (${newCode}) & gửi email tự động tới ${email} thành công!`
+        : `Đã cấp mã mới (${newCode}) thành công! (Lưu ý email: ${mailRes.error})`,
+      emailSent: mailRes.success,
+      emailError: mailRes.error
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || "Failed to regenerate code." });
+  }
+});
 
 // System Settings API Endpoints (Supabase Persistence for Alerts & API Configuration)
 async function loadNotificationSettingsFromSupabase() {
@@ -1086,14 +1317,24 @@ app.post("/api/admin/notification-settings", requireAdminAuth, handleSaveSetting
 app.post("/api/admin/settings", requireAdminAuth, handleSaveSettings);
 
 app.post("/api/admin/test-email", requireAdminAuth, async (req, res) => {
-  const success = await sendAdminEmailAlert(
-    "OutSystems Pro Academy - Test Gmail Alert",
-    "This is a test notification email from your OutSystems Pro Academy certification portal."
+  const targetEmail = req.body?.email || notificationSettings.adminEmail || process.env.ADMIN_EMAIL || "duongrbt@gmail.com";
+  const result = await sendCustomEmail(
+    targetEmail,
+    "[OutSystems Pro Academy] Test Gmail Alert",
+    `<div style="font-family: Arial; padding: 25px; color: #f8fafc; background-color: #0f172a; border-radius: 12px;">
+       <h2 style="color: #38bdf8; margin-top: 0;">🎉 Kiểm Tra Gửi Email Thành Công!</h2>
+       <p style="color: #cbd5e1;">Chức năng gửi email tự động từ hệ thống OutSystems Pro Academy hoạt động hoàn hảo!</p>
+       <p style="color: #94a3b8; font-size: 12px; margin-top: 20px;">Email người gửi: ${notificationSettings.adminEmail || 'Gmail System'}</p>
+     </div>`
   );
-  if (success) {
-    res.json({ success: true, message: `Test email sent successfully to ${notificationSettings.adminEmail}!` });
+
+  if (result.success) {
+    res.json({ success: true, message: `Gửi email thử nghiệm tới ${targetEmail} thành công!` });
   } else {
-    res.status(400).json({ success: false, message: "Failed to send Gmail alert. Please check Admin Gmail Address & App Password settings." });
+    res.status(400).json({ 
+      success: false, 
+      message: `Gửi email thất bại: ${result.error || 'Vui lòng kiểm tra lại cấu hình Gmail App Password trong tab Alerts & API.'}` 
+    });
   }
 });
 
