@@ -48,17 +48,23 @@ export default function UdemyMockExam({ course, onClose }: UdemyMockExamProps) {
     return arr;
   };
 
-  // Helper: Shuffle question choices while updating correct answer key
+  // Helper: Shuffle question choices while updating correct answer key based on exact text matching
   const shuffleQuestionChoices = (q: MockExamQuestion): MockExamQuestion => {
-    if (!q.choices || q.choices.length < 2) return q;
-    const correctChoiceObj = q.choices.find((c) => c.key === q.correctAnswer);
-    const shuffledChoicesRaw = shuffleArray(q.choices);
+    if (!q.choices || q.choices.length < 2) return { ...q };
+
+    // Find original correct choice text
+    const originalCorrectChoice = q.choices.find((c) => c.key === q.correctAnswer);
+    const correctText = originalCorrectChoice ? originalCorrectChoice.text : null;
+
+    // Deep copy choice objects to avoid mutating shared state
+    const choicesCopy = q.choices.map((c) => ({ key: c.key, text: c.text }));
+    const shuffledChoicesRaw = shuffleArray(choicesCopy);
     const keys = ['A', 'B', 'C', 'D', 'E', 'F'];
-    let newCorrectKey = 'A';
+    let newCorrectKey = q.correctAnswer;
 
     const newChoices = shuffledChoicesRaw.map((choice, idx) => {
       const newKey = keys[idx] || choice.key;
-      if (correctChoiceObj && choice.key === correctChoiceObj.key) {
+      if (correctText !== null && choice.text === correctText) {
         newCorrectKey = newKey;
       }
       return {
@@ -273,6 +279,7 @@ export default function UdemyMockExam({ course, onClose }: UdemyMockExamProps) {
                   key={s.id || idx}
                   onClick={() => {
                     setSelectedSet(s);
+                    setQuestions(getShuffledQuestions(s));
                     setExamPhase('confirm_details');
                   }}
                   className="bg-slate-50 hover:bg-lime-50 border-2 border-slate-200 hover:border-[#76b82a] p-4 rounded-xl flex items-center justify-between gap-4 transition-all cursor-pointer group shadow-xs"
