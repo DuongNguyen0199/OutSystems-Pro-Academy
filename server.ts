@@ -88,13 +88,14 @@ let memoryUsers: any[] = [
 let memoryActivationCodes: any[] = [];
 let memoryPaymentRequests: any[] = [];
 
-// Notification Settings State
+// Notification Settings State (Defaults populated from Supabase system_settings)
 const notificationSettings = {
   adminEmail: process.env.ADMIN_EMAIL || "duongrbt@gmail.com",
   gmailAppPassword: process.env.GMAIL_APP_PASSWORD || "",
-  telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || "",
-  telegramChatId: process.env.TELEGRAM_CHAT_ID || "",
-  emailApiKey: process.env.RESEND_API_KEY || process.env.BREVO_API_KEY || ""
+  telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || "8867065781:AAFOVTcG1_PRPDXaietEhuw-XJGeT9VtQoY",
+  telegramChatId: process.env.TELEGRAM_CHAT_ID || "8548541120",
+  emailApiKey: process.env.RESEND_API_KEY || process.env.BREVO_API_KEY || process.env.EMAIL_API_KEY || "",
+  resendApiKey: process.env.RESEND_API_KEY || process.env.EMAIL_API_KEY || ""
 };
 
 // Course fetching endpoint (Item 4: Alphabetical A -> Z sorting for all roles)
