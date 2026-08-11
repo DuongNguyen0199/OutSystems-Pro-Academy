@@ -78,22 +78,21 @@ let inMemoryCourseExamSets: Record<string, any[]> = {};
 let memoryUsers: any[] = [
   {
     id: "usr_admin_01",
-    email: "duongrbt@gmail.com",
-    fullName: "Duong Nguyen (Admin)",
+    email: (process.env.ADMIN_EMAIL || "duongrbt@gmail.com").trim().toLowerCase(),
+    fullName: "System Admin",
     role: "admin",
-    status: "active",
-    password: process.env.ADMIN_PASSWORD || "admin123"
+    status: "active"
   }
 ];
 let memoryActivationCodes: any[] = [];
 let memoryPaymentRequests: any[] = [];
 
-// Notification Settings State (Defaults populated from Supabase system_settings)
+// Notification Settings State (Defaults populated from Render ENV / Supabase system_settings)
 const notificationSettings = {
-  adminEmail: process.env.ADMIN_EMAIL || "duongrbt@gmail.com",
+  adminEmail: (process.env.ADMIN_EMAIL || "duongrbt@gmail.com").trim().toLowerCase(),
   gmailAppPassword: process.env.GMAIL_APP_PASSWORD || "",
-  telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || "8867065781:AAFOVTcG1_PRPDXaietEhuw-XJGeT9VtQoY",
-  telegramChatId: process.env.TELEGRAM_CHAT_ID || "8548541120",
+  telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || "",
+  telegramChatId: process.env.TELEGRAM_CHAT_ID || "",
   emailApiKey: process.env.RESEND_API_KEY || process.env.BREVO_API_KEY || process.env.EMAIL_API_KEY || "",
   resendApiKey: process.env.RESEND_API_KEY || process.env.EMAIL_API_KEY || ""
 };
@@ -269,26 +268,41 @@ app.post("/api/auth/login", async (req, res) => {
     const cleanEmail = email.trim().toLowerCase();
     const cleanPassword = password.trim();
 
-    // 1. Check memory users first (stores registered accounts & passwords)
+    const envAdminEmail = (process.env.ADMIN_EMAIL || notificationSettings.adminEmail || "").trim().toLowerCase();
+    const envAdminPassword = (process.env.ADMIN_PASSWORD || "").trim();
+
+    // 1. Check if email matches Admin account
+    if (cleanEmail === envAdminEmail) {
+      if (envAdminPassword && cleanPassword !== envAdminPassword) {
+        return res.status(401).json({ success: false, error: "Incorrect password for Admin account." });
+      }
+      return res.json({
+        success: true,
+        user: {
+          id: "usr_admin_01",
+          email: envAdminEmail,
+          fullName: "System Admin",
+          role: "admin",
+          status: "active"
+        }
+      });
+    }
+
+    // 2. Check memory users
     const foundMemoryUser = memoryUsers.find((u) => u.email.toLowerCase() === cleanEmail);
     if (foundMemoryUser) {
-      const isPassValid = (
-        cleanPassword === "Captainrbt0199#1" ||
-        cleanPassword === (process.env.ADMIN_PASSWORD || "").trim() ||
-        cleanPassword === foundMemoryUser.password ||
-        cleanPassword === "admin123" ||
-        cleanPassword === "admin"
-      );
-
-      if (!isPassValid && foundMemoryUser.role === 'admin') {
-        return res.status(401).json({ success: false, error: "Sai mật khẩu Admin! (Mật khẩu: Captainrbt0199#1 hoặc admin123)" });
-      }
-      if (!isPassValid && foundMemoryUser.password) {
+      if (foundMemoryUser.role === 'admin') {
+        if (envAdminPassword && cleanPassword !== envAdminPassword) {
+          return res.status(401).json({ success: false, error: "Incorrect password for Admin account." });
+        }
+      } else if (foundMemoryUser.password && foundMemoryUser.password !== cleanPassword) {
         return res.status(401).json({ success: false, error: "Incorrect password for this account." });
       }
+
       if (foundMemoryUser.status === 'inactive') {
         return res.status(403).json({ success: false, error: "This account has been set to Inactive by Admin." });
       }
+
       return res.json({
         success: true,
         user: {
@@ -297,30 +311,6 @@ app.post("/api/auth/login", async (req, res) => {
           fullName: foundMemoryUser.fullName,
           role: foundMemoryUser.role,
           status: foundMemoryUser.status
-        }
-      });
-    }
-
-    // 2. Default Admin Check for duongrbt@gmail.com
-    if (cleanEmail === "duongrbt@gmail.com") {
-      const expectedAdminPass = (process.env.ADMIN_PASSWORD || "").trim();
-      const isPassValid = (
-        cleanPassword === "Captainrbt0199#1" ||
-        cleanPassword === expectedAdminPass ||
-        cleanPassword === "admin123" ||
-        cleanPassword === "admin"
-      );
-      if (!isPassValid) {
-        return res.status(401).json({ success: false, error: "Sai mật khẩu Admin! (Mật khẩu: Captainrbt0199#1 hoặc admin123)" });
-      }
-      return res.json({
-        success: true,
-        user: {
-          id: "usr_admin_01",
-          email: "duongrbt@gmail.com",
-          fullName: "Duong Nguyen (Admin)",
-          role: "admin",
-          status: "active"
         }
       });
     }
@@ -339,17 +329,9 @@ app.post("/api/auth/login", async (req, res) => {
           return res.status(403).json({ success: false, error: "This account has been set to Inactive by Admin." });
         }
 
-        // If admin account in Supabase
-        if (dbUser.role === 'admin' || cleanEmail === 'duongrbt@gmail.com') {
-          const expectedAdminPass = (process.env.ADMIN_PASSWORD || "").trim();
-          const isPassValid = (
-            cleanPassword === "Captainrbt0199#1" ||
-            cleanPassword === expectedAdminPass ||
-            cleanPassword === "admin123" ||
-            cleanPassword === "admin"
-          );
-          if (!isPassValid) {
-            return res.status(401).json({ success: false, error: "Sai mật khẩu Admin! (Mật khẩu: Captainrbt0199#1 hoặc admin123)" });
+        if (dbUser.role === 'admin' || cleanEmail === envAdminEmail) {
+          if (envAdminPassword && cleanPassword !== envAdminPassword) {
+            return res.status(401).json({ success: false, error: "Incorrect password for Admin account." });
           }
         }
 

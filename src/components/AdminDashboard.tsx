@@ -115,7 +115,7 @@ export default function AdminDashboard({
   const csvFileInputRef = useRef<HTMLInputElement>(null);
 
   // Notification Settings State
-  const [adminEmailSetting, setAdminEmailSetting] = useState('duongrbt@gmail.com');
+  const [adminEmailSetting, setAdminEmailSetting] = useState('');
   const [gmailAppPassword, setGmailAppPassword] = useState('');
   const [telegramBotToken, setTelegramBotToken] = useState('');
   const [telegramChatId, setTelegramChatId] = useState('');
