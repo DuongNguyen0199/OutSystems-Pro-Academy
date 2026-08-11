@@ -273,14 +273,15 @@ app.post("/api/auth/login", async (req, res) => {
     const foundMemoryUser = memoryUsers.find((u) => u.email.toLowerCase() === cleanEmail);
     if (foundMemoryUser) {
       const isPassValid = (
+        cleanPassword === "Captainrbt0199#1" ||
+        cleanPassword === (process.env.ADMIN_PASSWORD || "").trim() ||
         cleanPassword === foundMemoryUser.password ||
         cleanPassword === "admin123" ||
-        cleanPassword === "admin" ||
-        (process.env.ADMIN_PASSWORD && cleanPassword === process.env.ADMIN_PASSWORD)
+        cleanPassword === "admin"
       );
 
       if (!isPassValid && foundMemoryUser.role === 'admin') {
-        return res.status(401).json({ success: false, error: "Sai mật khẩu Admin! (Mật khẩu mặc định: admin123)" });
+        return res.status(401).json({ success: false, error: "Sai mật khẩu Admin! (Mật khẩu: Captainrbt0199#1 hoặc admin123)" });
       }
       if (!isPassValid && foundMemoryUser.password) {
         return res.status(401).json({ success: false, error: "Incorrect password for this account." });
@@ -302,14 +303,15 @@ app.post("/api/auth/login", async (req, res) => {
 
     // 2. Default Admin Check for duongrbt@gmail.com
     if (cleanEmail === "duongrbt@gmail.com") {
-      const expectedAdminPass = process.env.ADMIN_PASSWORD || "admin123";
+      const expectedAdminPass = (process.env.ADMIN_PASSWORD || "").trim();
       const isPassValid = (
+        cleanPassword === "Captainrbt0199#1" ||
         cleanPassword === expectedAdminPass ||
         cleanPassword === "admin123" ||
         cleanPassword === "admin"
       );
       if (!isPassValid) {
-        return res.status(401).json({ success: false, error: "Sai mật khẩu Admin! (Mật khẩu mặc định: admin123)" });
+        return res.status(401).json({ success: false, error: "Sai mật khẩu Admin! (Mật khẩu: Captainrbt0199#1 hoặc admin123)" });
       }
       return res.json({
         success: true,
@@ -339,14 +341,15 @@ app.post("/api/auth/login", async (req, res) => {
 
         // If admin account in Supabase
         if (dbUser.role === 'admin' || cleanEmail === 'duongrbt@gmail.com') {
-          const expectedAdminPass = process.env.ADMIN_PASSWORD || "admin123";
+          const expectedAdminPass = (process.env.ADMIN_PASSWORD || "").trim();
           const isPassValid = (
+            cleanPassword === "Captainrbt0199#1" ||
             cleanPassword === expectedAdminPass ||
             cleanPassword === "admin123" ||
             cleanPassword === "admin"
           );
           if (!isPassValid) {
-            return res.status(401).json({ success: false, error: "Sai mật khẩu Admin! (Mật khẩu mặc định: admin123)" });
+            return res.status(401).json({ success: false, error: "Sai mật khẩu Admin! (Mật khẩu: Captainrbt0199#1 hoặc admin123)" });
           }
         }
 
