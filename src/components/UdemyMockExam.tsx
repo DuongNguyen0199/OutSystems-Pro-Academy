@@ -48,19 +48,19 @@ export default function UdemyMockExam({ course, onClose }: UdemyMockExamProps) {
     return arr;
   };
 
-  // Helper: Shuffle question choices while updating correct answer key based on exact text matching
+  // Helper: Shuffle question choices while updating correct answer key based on exact text matching & explanation mapping
   const shuffleQuestionChoices = (q: MockExamQuestion): MockExamQuestion => {
     if (!q.choices || q.choices.length < 2) return { ...q };
 
-    // Find original correct choice text
-    const originalCorrectChoice = q.choices.find((c) => c.key === q.correctAnswer);
+    const origCorrectKey = q.correctAnswer;
+    const originalCorrectChoice = q.choices.find((c) => c.key === origCorrectKey);
     const correctText = originalCorrectChoice ? originalCorrectChoice.text : null;
 
     // Deep copy choice objects to avoid mutating shared state
     const choicesCopy = q.choices.map((c) => ({ key: c.key, text: c.text }));
     const shuffledChoicesRaw = shuffleArray(choicesCopy);
     const keys = ['A', 'B', 'C', 'D', 'E', 'F'];
-    let newCorrectKey = q.correctAnswer;
+    let newCorrectKey = origCorrectKey;
 
     const newChoices = shuffledChoicesRaw.map((choice, idx) => {
       const newKey = keys[idx] || choice.key;
@@ -69,14 +69,28 @@ export default function UdemyMockExam({ course, onClose }: UdemyMockExamProps) {
       }
       return {
         key: newKey,
-        text: choice.text
+        text: choice.text,
+        originalKey: choice.key
       };
     });
+
+    // Dynamically map explanation text references if the correct key position changed
+    let updatedExplanation = q.explanation || '';
+    if (updatedExplanation && origCorrectKey && newCorrectKey && origCorrectKey !== newCorrectKey) {
+      const prefixes = ['Option', 'Choice', 'Đáp án', 'Answer'];
+      prefixes.forEach(prefix => {
+        const reg = new RegExp(`\\b${prefix}\\s+${origCorrectKey}\\b`, 'gi');
+        updatedExplanation = updatedExplanation.replace(reg, `${prefix} ${newCorrectKey}`);
+      });
+      updatedExplanation = updatedExplanation.replace(new RegExp(`\\b${origCorrectKey}\\.\\s`, 'g'), `${newCorrectKey}. `);
+      updatedExplanation = updatedExplanation.replace(new RegExp(`\\(${origCorrectKey}\\)`, 'g'), `(${newCorrectKey})`);
+    }
 
     return {
       ...q,
       choices: newChoices,
-      correctAnswer: newCorrectKey
+      correctAnswer: newCorrectKey,
+      explanation: updatedExplanation
     };
   };
 
