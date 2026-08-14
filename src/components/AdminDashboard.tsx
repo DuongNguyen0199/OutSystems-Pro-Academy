@@ -954,8 +954,24 @@ export default function AdminDashboard({
         const opt2Idx = headerCells.findIndex(h => h.includes('answer option 2') || h === 'choice b' || h === 'option b');
         const opt3Idx = headerCells.findIndex(h => h.includes('answer option 3') || h === 'choice c' || h === 'option c');
         const opt4Idx = headerCells.findIndex(h => h.includes('answer option 4') || h === 'choice d' || h === 'option d');
-        const correctIdx = headerCells.findIndex(h => h.includes('correct answer') || h.includes('correctanswers') || h.includes('correct'));
-        const expIdx = headerCells.findIndex(h => h.includes('overall explanation') || h.includes('explanation'));
+
+        // Find correct answer column accurately
+        let correctIdx = headerCells.findIndex(h => h.trim() === 'correct answers' || h.trim() === 'correct answer' || h.trim() === 'correct');
+        if (correctIdx === -1) {
+          correctIdx = headerCells.findIndex(h => h.includes('correct'));
+        }
+
+        // Find Overall Explanation column accurately (MUST NOT match "Explanation 1", "Explanation 2", etc.)
+        let expIdx = headerCells.findIndex(h => h.trim() === 'overall explanation' || h.trim() === 'overall_explanation');
+        if (expIdx === -1) {
+          expIdx = headerCells.findIndex(h => h.includes('overall explanation'));
+        }
+        if (expIdx === -1) {
+          expIdx = headerCells.findIndex(h => h.trim() === 'explanation');
+        }
+        if (expIdx === -1) {
+          expIdx = headerCells.findIndex(h => h.includes('explanation') && !/\d+$/.test(h.trim()));
+        }
 
         if (opt1Idx !== -1 && opt2Idx !== -1) {
           if (cells[opt1Idx]) choices.push({ key: 'A', text: cells[opt1Idx] });
@@ -977,15 +993,41 @@ export default function AdminDashboard({
             explanation = cells[expIdx];
           }
         } else {
-          if (cells[1]) choices.push({ key: 'A', text: cells[1] });
-          if (cells[2]) choices.push({ key: 'B', text: cells[2] });
-          if (cells[3]) choices.push({ key: 'C', text: cells[3] });
-          if (cells[4]) choices.push({ key: 'D', text: cells[4] });
+          // Standard Udemy 16-column layout fallback:
+          // Col 0: Question, Col 2: Option 1, Col 4: Option 2, Col 6: Option 3, Col 8: Option 4, Col 14: Correct Answers, Col 15: Overall Explanation
+          if (cells[2] && cells[4]) {
+            if (cells[2]) choices.push({ key: 'A', text: cells[2] });
+            if (cells[4]) choices.push({ key: 'B', text: cells[4] });
+            if (cells[6]) choices.push({ key: 'C', text: cells[6] });
+            if (cells[8]) choices.push({ key: 'D', text: cells[8] });
 
-          if (cells[5]) {
-            correctKey = cells[5].trim().toUpperCase();
+            if (cells[14]) {
+              const rawAns = cells[14].trim();
+              const num = parseInt(rawAns, 10);
+              if (num === 1) correctKey = 'A';
+              else if (num === 2) correctKey = 'B';
+              else if (num === 3) correctKey = 'C';
+              else if (num === 4) correctKey = 'D';
+              else if (['A', 'B', 'C', 'D'].includes(rawAns.toUpperCase())) correctKey = rawAns.toUpperCase();
+            }
+            if (cells[15]) explanation = cells[15];
+          } else {
+            if (cells[1]) choices.push({ key: 'A', text: cells[1] });
+            if (cells[2]) choices.push({ key: 'B', text: cells[2] });
+            if (cells[3]) choices.push({ key: 'C', text: cells[3] });
+            if (cells[4]) choices.push({ key: 'D', text: cells[4] });
+
+            if (cells[5]) {
+              const rawAns = cells[5].trim();
+              const num = parseInt(rawAns, 10);
+              if (num === 1) correctKey = 'A';
+              else if (num === 2) correctKey = 'B';
+              else if (num === 3) correctKey = 'C';
+              else if (num === 4) correctKey = 'D';
+              else if (['A', 'B', 'C', 'D'].includes(rawAns.toUpperCase())) correctKey = rawAns.toUpperCase();
+            }
+            if (cells[6]) explanation = cells[6];
           }
-          if (cells[6]) explanation = cells[6];
         }
 
         if (questionText && choices.length >= 2) {
