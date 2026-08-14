@@ -237,11 +237,18 @@ export default function UdemyMockExam({ course, onClose }: UdemyMockExamProps) {
     setLoadingAi((prev) => ({ ...prev, [qIndex]: true }));
 
     try {
-      const promptText = `Provide a concise 2-sentence explanation why option ${questionObj.correctAnswer} is correct for: "${questionObj.question}"`;
-      const res = await fetch('/api/ai/explain', {
+      const userAns = selectedAnswers[qIndex];
+      const res = await fetch('/api/explain', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: promptText })
+        body: JSON.stringify({
+          question: questionObj.question,
+          choices: questionObj.choices,
+          correctAnswer: questionObj.correctAnswer,
+          userAnswer: userAns,
+          explanation: questionObj.explanation,
+          courseTitle: course.title
+        })
       });
       const data = await res.json();
       setAiExplanations((prev) => ({
