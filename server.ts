@@ -206,7 +206,7 @@ app.get("/api/courses", async (req, res) => {
       }
 
       if (!sets || !Array.isArray(sets) || sets.length === 0) {
-        sets = [
+        sets = fallback && fallback.examSets && fallback.examSets.length > 0 ? fallback.examSets : [
           {
             id: 'set-1',
             title: 'Dump 01',
@@ -222,6 +222,14 @@ app.get("/api/courses", async (req, res) => {
         const allSetQuestions = sets.flatMap((s: any) => s.questions || []);
         if (allSetQuestions.length > 0) {
           mockExam = allSetQuestions;
+        } else if (fallback && fallback.mockExam && fallback.mockExam.length > 0) {
+          mockExam = fallback.mockExam;
+        }
+      }
+
+      if (!mockExam || mockExam.length === 0) {
+        if (fallback && fallback.mockExam && fallback.mockExam.length > 0) {
+          mockExam = fallback.mockExam;
         }
       }
 

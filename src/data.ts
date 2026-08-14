@@ -207,3 +207,34 @@ export const courses: Course[] = [
     ]
   }
 ];
+
+
+import { PREPOPULATED_COURSES_DATA } from './prepopulated_courses_data';
+
+const idMapping: Record<string, string> = {
+  'agentic-ai-specialist': 'course_custom_1783426796399',
+  'architecture-specialist-o11': 'course_custom_1783426796400',
+  'associate-architecture-odc': 'course_custom_1783426796401',
+  'associate-delivery-specialist': 'course_custom_1783426796402',
+  'associate-front-end-developer': 'course_custom_1783426796403',
+  'associate-mobile-developer': 'course_custom_1783426796404',
+  'associate-platform-ops-engineer': 'course_custom_1783426796405',
+  'associate-reactive-developer': 'course_custom_1783426796406',
+  'associate-security-specialist': 'course_custom_1783426796407',
+  'associate-tech-lead': 'course_custom_1783426796408',
+  'associate-traditional-developer': 'course_custom_1783426796409',
+  'associate-web-specialist': 'course_custom_1783426796410'
+};
+
+courses.forEach(c => {
+  const pKey = idMapping[c.id] || c.id;
+  const pData = PREPOPULATED_COURSES_DATA[pKey] || PREPOPULATED_COURSES_DATA[c.id];
+  if (pData) {
+    if (!c.mockExam || c.mockExam.length === 0) {
+      c.mockExam = pData.mockExam;
+    }
+    if (!c.examSets || c.examSets.length === 0) {
+      c.examSets = pData.examSets;
+    }
+  }
+});
