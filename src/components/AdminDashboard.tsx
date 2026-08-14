@@ -580,17 +580,54 @@ export default function AdminDashboard({
         return;
       }
 
-      // Step 1: Convert image files to Base64
-      setBulkStatusMsg(`Đang đọc & chuyển đổi ${imgFiles.length} file hình ảnh sơ đồ sang mã nhúng Base64...`);
+      // Step 1: Convert & compress image files to lightweight Base64 (max 900px, quality 0.75)
+      setBulkStatusMsg(`Đang đọc & tối ưu hóa nén ${imgFiles.length} file hình ảnh sơ đồ sang mã nhúng Base64...`);
       const imageMap: Record<string, string> = {};
 
-      for (const imgFile of imgFiles) {
-        const base64 = await new Promise<string>((resolve) => {
+      const compressImageFile = (file: File): Promise<string> => {
+        return new Promise((resolve) => {
           const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
+          reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+              const canvas = document.createElement('canvas');
+              let width = img.width;
+              let height = img.height;
+              const maxW = 900;
+              const maxH = 900;
+
+              if (width > maxW || height > maxH) {
+                if (width / height > maxW / maxH) {
+                  height = Math.round((height * maxW) / width);
+                  width = maxW;
+                } else {
+                  width = Math.round((width * maxH) / height);
+                  height = maxH;
+                }
+              }
+
+              canvas.width = width;
+              canvas.height = height;
+              const ctx = canvas.getContext('2d');
+              if (ctx) {
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(0, 0, width, height);
+                ctx.drawImage(img, 0, 0, width, height);
+                resolve(canvas.toDataURL('image/jpeg', 0.75));
+              } else {
+                resolve(e.target?.result as string || '');
+              }
+            };
+            img.onerror = () => resolve(e.target?.result as string || '');
+            img.src = e.target?.result as string;
+          };
           reader.onerror = () => resolve('');
-          reader.readAsDataURL(imgFile);
+          reader.readAsDataURL(file);
         });
+      };
+
+      for (const imgFile of imgFiles) {
+        const base64 = await compressImageFile(imgFile);
         if (base64) {
           imageMap[imgFile.name.toLowerCase()] = base64;
           const relPath = (imgFile as any).webkitRelativePath;
@@ -852,7 +889,18 @@ export default function AdminDashboard({
           questions: bulkParsedQuestions
         })
       });
-      const data = await res.json();
+
+      const resText = await res.text();
+      let data: any;
+      try {
+        data = JSON.parse(resText);
+      } catch (parseErr) {
+        if (res.status === 413 || resText.toLowerCase().includes('too large')) {
+          throw new Error('Dung lượng hình ảnh câu hỏi vượt quá giới hạn máy chủ (413 Payload Too Large). Vui lòng tải lại thư mục để áp dụng bộ nén ảnh tự động.');
+        }
+        throw new Error(`Máy chủ phản hồi trang lỗi HTML (Mã HTTP ${res.status}). Vui lòng kiểm tra lại quyền Admin hoặc kết nối mạng.`);
+      }
+
       if (data.success) {
         const targetCourse = courses.find(c => c.id === bulkCourseId);
         const courseTitle = targetCourse ? targetCourse.title : bulkCourseId;
