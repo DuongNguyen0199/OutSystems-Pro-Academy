@@ -598,7 +598,7 @@ export default function AdminDashboard({
         }
       }
 
-      // Step 2: Read and parse each HTML file
+      // Step 2: Read and parse each HTML file using native Browser DOMParser
       setBulkStatusMsg(`Đang phân tích chi tiết nội dung ${htmlFiles.length} file HTML đề thi...`);
       const parsedSetsArr: ExamSet[] = [];
       const allQsArr: MockExamQuestion[] = [];
@@ -606,6 +606,8 @@ export default function AdminDashboard({
 
       // Sort HTML files numerically
       htmlFiles.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+
+      const parser = new DOMParser();
 
       for (let sIdx = 0; sIdx < htmlFiles.length; sIdx++) {
         const htmlFile = htmlFiles[sIdx];
@@ -628,17 +630,32 @@ export default function AdminDashboard({
           setTitle = `Practice Test ${sIdx + 1}`;
         }
 
-        const blocks = htmlContent.split(/result-pane--question-result-pane-wrapper|result-pane--question-result-pane/i);
+        const doc = parser.parseFromString(htmlContent, 'text/html');
+
+        // Query question wrapper cards using multiple selectors
+        let questionNodes = Array.from(doc.querySelectorAll('.result-pane--question-result-pane-wrapper--2bGiz, [class*="question-result-pane-wrapper"]'));
+        if (questionNodes.length === 0) {
+          questionNodes = Array.from(doc.querySelectorAll('.result-pane--question-result-pane--sIcOh, [class*="question-result-pane"]')).filter(el => !el.classList.contains('result-pane--question-result-pane-expanded-content--Og5Vc'));
+        }
+        if (questionNodes.length === 0) {
+          questionNodes = Array.from(doc.querySelectorAll('#question-prompt, [id^="question-prompt"]')).map(el => el.closest('div[class*="result-pane"]') || el.parentElement || el);
+        }
+
+        // Deduplicate nodes
+        const uniqueNodes = Array.from(new Set(questionNodes)).filter(Boolean);
         const setQs: MockExamQuestion[] = [];
 
-        blocks.slice(1).forEach((block, qIdx) => {
-          const promptMatch = block.match(/id=["']question-prompt["'][^>]*>(.*?)<\/div>\s*<\/div>/s) || block.match(/result-pane--question-format--PBvdY[^>]*>(.*?)<\/div>/s);
-          let rawPromptHtml = promptMatch ? promptMatch[1] : '';
+        uniqueNodes.forEach((node, qIdx) => {
+          const promptEl = node.querySelector('#question-prompt, [id^="question-prompt"], .result-pane--question-format--PBvdY, [class*="question-format"]');
+          let questionText = promptEl ? promptEl.textContent?.trim() : '';
 
+          if (!questionText) return;
+
+          // Check image in prompt or question node
           let imageUrl: string | undefined = undefined;
-          const imgMatch = rawPromptHtml.match(/<img[^>]+src=["']([^"']+)["']/i) || block.match(/<img[^>]+src=["']([^"']+)["']/i);
-          if (imgMatch) {
-            const rawSrc = imgMatch[1];
+          const imgEl = node.querySelector('img');
+          if (imgEl) {
+            const rawSrc = imgEl.getAttribute('src') || '';
             const fileNameOnly = rawSrc.split(/[/\\]/).pop()?.toLowerCase() || '';
             const foundBase64 = imageMap[fileNameOnly] || imageMap[rawSrc.toLowerCase()];
             if (foundBase64) {
@@ -647,28 +664,34 @@ export default function AdminDashboard({
             }
           }
 
-          let questionText = rawPromptHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+          questionText = questionText.replace(/\s+/g, ' ').trim();
 
-          const answerBlocks = block.split(/result-pane--answer-result-pane--Niazi/i).slice(1);
+          // Choices
+          const answerNodes = node.querySelectorAll('.result-pane--answer-result-pane--Niazi, [class*="answer-result-pane"]');
           const choices: { key: string; text: string }[] = [];
           let correctKey = 'A';
           const keys = ['A', 'B', 'C', 'D', 'E', 'F'];
 
-          answerBlocks.forEach((ans, aIdx) => {
-            const isCorrect = ans.includes('answer-result-pane--answer-correct--PLOEU') || ans.includes('Câu trả lời đúng') || ans.includes('Correct answer');
-            const textMatch = ans.match(/id=["']answer-text["'][^>]*>(.*?)<\/div>/s) || ans.match(/rt-scaffolding[^>]*>(.*?)<\/div>/s);
-            let text = textMatch ? textMatch[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : '';
-            const key = keys[aIdx] || 'A';
+          answerNodes.forEach((ansNode, aIdx) => {
+            const isCorrect = ansNode.querySelector('.answer-result-pane--answer-correct--PLOEU, [class*="answer-correct"]') !== null ||
+                              ansNode.textContent?.includes('Câu trả lời đúng') ||
+                              ansNode.textContent?.includes('Correct answer');
+            const textEl = ansNode.querySelector('#answer-text, [id^="answer-text"], .ud-heading-md, [class*="answer-body"]');
+            let text = textEl ? textEl.textContent?.trim() : ansNode.textContent?.trim();
+
             if (text) {
+              text = text.replace(/Câu trả lời đúng|Correct answer/gi, '').replace(/\s+/g, ' ').trim();
+              const key = keys[aIdx] || 'A';
               choices.push({ key, text });
               if (isCorrect) correctKey = key;
             }
           });
 
+          // Explanation
           let explanation = 'Official OutSystems Exam Question';
-          const expMatch = block.match(/result-pane--explanation[^>]*>(.*?)<\/div>/s) || block.match(/explanation[^>]*>(.*?)<\/div>/s);
-          if (expMatch) {
-            explanation = expMatch[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+          const expEl = node.querySelector('.result-pane--explanation, [class*="explanation"]');
+          if (expEl && expEl.textContent) {
+            explanation = expEl.textContent.replace(/\s+/g, ' ').trim();
           }
 
           if (questionText && choices.length >= 2) {
