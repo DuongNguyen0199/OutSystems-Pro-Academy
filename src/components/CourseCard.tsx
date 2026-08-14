@@ -22,7 +22,10 @@ export default function CourseCard({
 
   // Safe fallback to prevent blank/white screen if mockExam is undefined
   const safeMockExam = course.mockExam || [];
-  const previewQuestions = safeMockExam.slice(0, 10);
+
+  // Strictly select the FIRST 10 text-only questions (questions WITHOUT images) in fixed original order
+  const textOnlyQuestions = safeMockExam.filter(q => !q.imageUrl || q.imageUrl.trim() === '');
+  const previewQuestions = (textOnlyQuestions.length >= 10 ? textOnlyQuestions : safeMockExam).slice(0, 10);
 
   const getTagStyle = (color: string) => {
     switch (color) {
