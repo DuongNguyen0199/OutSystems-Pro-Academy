@@ -990,6 +990,105 @@ app.post("/api/admin/questions/import", requireAdminAuth, async (req, res) => {
   }
 });
 
+// BULK REPLACE ENTIRE QUESTION BANK FOR A COURSE ENDPOINT
+app.post("/api/admin/questions/bulk-replace-course", requireAdminAuth, async (req, res) => {
+  try {
+    const { courseId, examSets, questions } = req.body;
+    if (!courseId || !Array.isArray(questions)) {
+      return res.status(400).json({ success: false, error: "Invalid payload: courseId and questions required." });
+    }
+
+    const targetUuid = resolveCourseUuid(courseId);
+    const resolvedSets = Array.isArray(examSets) && examSets.length > 0 ? examSets : [
+      {
+        id: 'set-1',
+        title: 'Dump 01',
+        description: 'Bài kiểm tra thực hành Dump 01',
+        durationMinutes: 90,
+        passingScorePct: 70,
+        randomizeQuestions: false,
+        questions: questions
+      }
+    ];
+
+    // 1. Update in-memory state
+    inMemoryCourseQuestions[courseId] = questions;
+    inMemoryCourseQuestions[targetUuid] = questions;
+    inMemoryCourseExamSets[courseId] = resolvedSets;
+    inMemoryCourseExamSets[targetUuid] = resolvedSets;
+
+    const fIdx = fallbackCourses.findIndex(f => f.id === courseId || f.id === targetUuid);
+    if (fIdx !== -1) {
+      fallbackCourses[fIdx].mockExam = questions;
+      fallbackCourses[fIdx].examSets = resolvedSets;
+    }
+
+    // 2. Sync to Supabase
+    const supabase = getSupabase();
+    if (supabase) {
+      await syncCourseExamSetsToSupabase(supabase, courseId, targetUuid, resolvedSets);
+
+      const fallbackObj = fallbackCourses.find(f => f.id === courseId) || fallbackCourses[0];
+      const hex = targetUuid.replace(/-/g, '');
+      const examId = `${hex.substring(0, 8)}-${hex.substring(8, 12)}-4${hex.substring(13, 16)}-a${hex.substring(17, 20)}-${hex.substring(20, 32)}`;
+
+      await supabase.from('exams').upsert({
+        id: examId,
+        course_id: targetUuid,
+        title: `${fallbackObj ? fallbackObj.title : courseId} - Official Practice Exam`
+      });
+
+      // Clear old questions
+      const { data: existingQs } = await supabase.from("exam_questions").select("id").eq("exam_id", examId);
+      if (existingQs && existingQs.length > 0) {
+        const qIds = existingQs.map(q => q.id);
+        await supabase.from("question_options").delete().in("question_id", qIds);
+        await supabase.from("exam_questions").delete().eq("exam_id", examId);
+      }
+
+      // Batch insert new questions
+      const examPayload = questions.map((q: any) => ({
+        exam_id: examId,
+        question_text: q.question,
+        correct_answer: q.correctAnswer || q.correct_answer || 'A',
+        explanation: q.explanation || "Official OutSystems Exam Question",
+        image_url: q.imageUrl || q.image_url || null
+      }));
+
+      for (let i = 0; i < examPayload.length; i += 50) {
+        const chunk = examPayload.slice(i, i + 50);
+        const { data: insertedQs } = await supabase.from("exam_questions").insert(chunk).select();
+        if (insertedQs) {
+          const optionsPayload: any[] = [];
+          insertedQs.forEach((iq: any, idx: number) => {
+            const originalChoices = questions[i + idx]?.choices || [];
+            originalChoices.forEach((opt: any) => {
+              optionsPayload.push({
+                question_id: iq.id,
+                option_key: opt.key,
+                option_text: opt.text
+              });
+            });
+          });
+          if (optionsPayload.length > 0) {
+            await supabase.from("question_options").insert(optionsPayload);
+          }
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Đã thay thế toàn bộ Ngân hàng câu hỏi (${questions.length} câu, ${resolvedSets.length} bộ đề) cho khóa học thành công!`,
+      totalQuestions: questions.length,
+      totalSets: resolvedSets.length
+    });
+  } catch (err: any) {
+    console.error("Bulk replace error:", err);
+    res.status(500).json({ success: false, error: err.message || "Failed to bulk replace questions." });
+  }
+});
+
 // SAVE EXAM SETS & CONFIGURATION ENDPOINT
 app.post("/api/admin/courses/sets/update", requireAdminAuth, async (req, res) => {
   try {

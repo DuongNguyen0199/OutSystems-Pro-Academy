@@ -30,7 +30,11 @@ import {
   Save,
   Users,
   UserPlus,
-  RotateCcw
+  RotateCcw,
+  FolderUp,
+  FolderInput,
+  Zap,
+  AlertCircle
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -44,9 +48,22 @@ export default function AdminDashboard({
   onClose,
   onUpdateCourses,
 }: AdminDashboardProps) {
-  const [activeTab, setActiveTab] = useState<'courses' | 'payments' | 'questions' | 'users' | 'notifications'>('courses');
+  const [activeTab, setActiveTab] = useState<'courses' | 'payments' | 'questions' | 'users' | 'notifications' | 'bulk_import'>('courses');
   const [selectedCourseId, setSelectedCourseId] = useState<string>(courses[0]?.id || '');
   const [searchQuestionQuery, setSearchQuestionQuery] = useState('');
+
+  // Bulk Import Folder State
+  const [bulkCourseId, setBulkCourseId] = useState<string>(courses[0]?.id || '');
+  const [bulkProcessing, setBulkProcessing] = useState(false);
+  const [bulkStatusMsg, setBulkStatusMsg] = useState('');
+  const [bulkParsedSets, setBulkParsedSets] = useState<ExamSet[]>([]);
+  const [bulkParsedQuestions, setBulkParsedQuestions] = useState<MockExamQuestion[]>([]);
+  const [bulkImgCount, setBulkImgCount] = useState(0);
+  const [bulkSuccessMsg, setBulkSuccessMsg] = useState('');
+  const [bulkErrorMsg, setBulkErrorMsg] = useState('');
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  const bulkFolderInputRef = useRef<HTMLInputElement>(null);
 
   // Exam Set Management State (Screenshot 1 & Screenshot 2)
   const [selectedSetId, setSelectedSetId] = useState<string | null>(null);
@@ -507,6 +524,244 @@ export default function AdminDashboard({
       setNotifStatusMsg(data.message || 'Notification settings saved successfully!');
     } catch (err) {
       setNotifStatusMsg('Saved settings to local session.');
+    }
+  };
+
+  // --------------------------------------------------------------------------
+  // BULK FOLDER IMPORT LOGIC (HTML + CSV + .files Image Folders)
+  // --------------------------------------------------------------------------
+  const processFolderFiles = async (filesList: File[] | FileList) => {
+    setBulkProcessing(true);
+    setBulkStatusMsg('Đang đọc và quét các file trong thư mục...');
+    setBulkErrorMsg('');
+    setBulkSuccessMsg('');
+
+    try {
+      const filesArr = Array.from(filesList);
+      const htmlFiles = filesArr.filter(f => f.name.endsWith('.html'));
+      const imgFiles = filesArr.filter(f => /\.(png|jpe?g|gif|svg|webp)$/i.test(f.name));
+
+      if (htmlFiles.length === 0) {
+        setBulkErrorMsg('Không tìm thấy file .html nào trong thư mục đã chọn. Vui lòng kéo thả toàn bộ thư mục khóa học chứa file .html và .files.');
+        setBulkProcessing(false);
+        return;
+      }
+
+      // Step 1: Convert image files to Base64
+      setBulkStatusMsg(`Đang xử lý & chuyển đổi ${imgFiles.length} file hình ảnh sơ đồ sang Base64...`);
+      const imageMap: Record<string, string> = {};
+
+      for (const imgFile of imgFiles) {
+        const base64 = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => resolve('');
+          reader.readAsDataURL(imgFile);
+        });
+        if (base64) {
+          imageMap[imgFile.name.toLowerCase()] = base64;
+          const relPath = (imgFile as any).webkitRelativePath;
+          if (relPath) {
+            imageMap[relPath.toLowerCase()] = base64;
+            const parts = relPath.split('/');
+            if (parts.length > 1) {
+              imageMap[parts.slice(1).join('/').toLowerCase()] = base64;
+            }
+          }
+        }
+      }
+
+      // Step 2: Read and parse each HTML file
+      setBulkStatusMsg(`Đang phân tích cú pháp ${htmlFiles.length} file HTML đề thi...`);
+      const parsedSetsArr: ExamSet[] = [];
+      const allQsArr: MockExamQuestion[] = [];
+      let totalImgExtracted = 0;
+
+      // Sort HTML files numerically
+      htmlFiles.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+
+      for (let sIdx = 0; sIdx < htmlFiles.length; sIdx++) {
+        const htmlFile = htmlFiles[sIdx];
+        const htmlContent = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => resolve('');
+          reader.readAsText(htmlFile);
+        });
+
+        let setTitle = `Dump 0${sIdx + 1}`;
+        const fname = htmlFile.name.toLowerCase();
+        if (fname.includes('dump01') || fname.includes('dump 01')) setTitle = 'Dump 01';
+        else if (fname.includes('dump02') || fname.includes('dump 02')) setTitle = 'Dump 02';
+        else if (fname.includes('dump03') || fname.includes('dump 03')) setTitle = 'Dump 03';
+        else if (fname.includes('dump04') || fname.includes('dump 04')) setTitle = 'Dump 04';
+        else if (fname.includes('dump05') || fname.includes('dump 05')) setTitle = 'Dump 05';
+        else if (fname.includes('dump06') || fname.includes('dump 06')) setTitle = 'Dump 06';
+        else if (fname.includes('practice') || fname.includes('detailed')) {
+          setTitle = `Practice Test ${sIdx + 1}`;
+        }
+
+        const blocks = htmlContent.split(/result-pane--question-result-pane-wrapper/i);
+        const setQs: MockExamQuestion[] = [];
+
+        blocks.slice(1).forEach((block, qIdx) => {
+          const promptMatch = block.match(/id=["']question-prompt["'][^>]*>(.*?)<\/div>\s*<\/div>/s) || block.match(/result-pane--question-format--PBvdY[^>]*>(.*?)<\/div>/s);
+          let rawPromptHtml = promptMatch ? promptMatch[1] : '';
+
+          let imageUrl: string | undefined = undefined;
+          const imgMatch = rawPromptHtml.match(/<img[^>]+src=["']([^"']+)["']/i) || block.match(/<img[^>]+src=["']([^"']+)["']/i);
+          if (imgMatch) {
+            const rawSrc = imgMatch[1];
+            const fileNameOnly = rawSrc.split(/[/\\]/).pop()?.toLowerCase() || '';
+            const foundBase64 = imageMap[fileNameOnly] || imageMap[rawSrc.toLowerCase()];
+            if (foundBase64) {
+              imageUrl = foundBase64;
+              totalImgExtracted++;
+            }
+          }
+
+          let questionText = rawPromptHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+
+          const answerBlocks = block.split(/result-pane--answer-result-pane--Niazi/i).slice(1);
+          const choices: { key: string; text: string }[] = [];
+          let correctKey = 'A';
+          const keys = ['A', 'B', 'C', 'D', 'E', 'F'];
+
+          answerBlocks.forEach((ans, aIdx) => {
+            const isCorrect = ans.includes('answer-result-pane--answer-correct--PLOEU') || ans.includes('Câu trả lời đúng') || ans.includes('Correct answer');
+            const textMatch = ans.match(/id=["']answer-text["'][^>]*>(.*?)<\/div>/s) || ans.match(/rt-scaffolding[^>]*>(.*?)<\/div>/s);
+            let text = textMatch ? textMatch[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : '';
+            const key = keys[aIdx] || 'A';
+            if (text) {
+              choices.push({ key, text });
+              if (isCorrect) correctKey = key;
+            }
+          });
+
+          let explanation = 'Official OutSystems Exam Question';
+          const expMatch = block.match(/result-pane--explanation[^>]*>(.*?)<\/div>/s) || block.match(/explanation[^>]*>(.*?)<\/div>/s);
+          if (expMatch) {
+            explanation = expMatch[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+          }
+
+          if (questionText && choices.length >= 2) {
+            const qObj: MockExamQuestion = {
+              id: `q_bulk_${sIdx+1}_${qIdx+1}`,
+              question: questionText,
+              choices: choices,
+              correctAnswer: correctKey,
+              explanation: explanation,
+              imageUrl: imageUrl
+            };
+            setQs.push(qObj);
+            allQsArr.push(qObj);
+          }
+        });
+
+        if (setQs.length > 0) {
+          parsedSetsArr.push({
+            id: `set-bulk-${sIdx+1}`,
+            title: setTitle,
+            description: `Bài kiểm tra thực hành ${setTitle}`,
+            durationMinutes: 90,
+            passingScorePct: 70,
+            randomizeQuestions: false,
+            questions: setQs
+          });
+        }
+      }
+
+      setBulkParsedSets(parsedSetsArr);
+      setBulkParsedQuestions(allQsArr);
+      setBulkImgCount(totalImgExtracted);
+      setBulkStatusMsg(`✅ Phân tích hoàn tất: Trích xuất thành công ${allQsArr.length} câu hỏi thuộc ${parsedSetsArr.length} bộ đề (${totalImgExtracted} sơ đồ đã nhúng Base64)!`);
+    } catch (err: any) {
+      setBulkErrorMsg(`Lỗi khi đọc thư mục: ${err.message}`);
+    } finally {
+      setBulkProcessing(false);
+    }
+  };
+
+  const handleDropFolder = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragOver(false);
+
+    const items = e.dataTransfer.items;
+    if (!items || items.length === 0) return;
+
+    const files: File[] = [];
+    const readEntry = async (entry: any) => {
+      if (entry.isFile) {
+        await new Promise<void>((resolve) => {
+          entry.file((f: File) => {
+            files.push(f);
+            resolve();
+          });
+        });
+      } else if (entry.isDirectory) {
+        const dirReader = entry.createReader();
+        const entries = await new Promise<any[]>((resolve) => {
+          dirReader.readEntries((results: any[]) => resolve(results));
+        });
+        for (const child of entries) {
+          await readEntry(child);
+        }
+      }
+    };
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
+      if (entry) {
+        await readEntry(entry);
+      } else if (item.kind === 'file') {
+        const f = item.getAsFile();
+        if (f) files.push(f);
+      }
+    }
+
+    if (files.length > 0) {
+      processFolderFiles(files);
+    } else if (e.dataTransfer.files.length > 0) {
+      processFolderFiles(e.dataTransfer.files);
+    }
+  };
+
+  const handleExecuteBulkReplace = async () => {
+    if (bulkParsedQuestions.length === 0) {
+      setBulkErrorMsg('Chưa có câu hỏi nào được phân tích từ thư mục.');
+      return;
+    }
+
+    setBulkProcessing(true);
+    setBulkStatusMsg('Đang lưu và đồng bộ toàn bộ Ngân hàng câu hỏi mới lên hệ thống...');
+
+    try {
+      const res = await fetch('/api/admin/questions/bulk-replace-course', {
+        method: 'POST',
+        headers: getAdminHeaders(),
+        body: JSON.stringify({
+          courseId: bulkCourseId,
+          examSets: bulkParsedSets,
+          questions: bulkParsedQuestions
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setBulkSuccessMsg(data.message || 'Thay thế ngân hàng câu hỏi thành công!');
+        const targetCourse = courses.find(c => c.id === bulkCourseId);
+        if (targetCourse) {
+          targetCourse.mockExam = bulkParsedQuestions;
+          targetCourse.examSets = bulkParsedSets;
+          onUpdateCourses([...courses]);
+        }
+      } else {
+        setBulkErrorMsg(data.error || 'Lỗi khi lưu câu hỏi lên máy chủ.');
+      }
+    } catch (err: any) {
+      setBulkErrorMsg(`Lỗi kết nối: ${err.message}`);
+    } finally {
+      setBulkProcessing(false);
     }
   };
 
@@ -1181,6 +1436,18 @@ export default function AdminDashboard({
           >
             <BellRing className="w-4 h-4 text-amber-400" />
             <span>Alerts & API</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('bulk_import')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'bulk_import'
+                ? 'bg-amber-600 text-white shadow-md'
+                : 'text-amber-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <FolderUp className="w-4 h-4 text-amber-400" />
+            <span>Bulk Import Question</span>
           </button>
         </div>
       </header>
@@ -2176,6 +2443,211 @@ export default function AdminDashboard({
                 </button>
               </form>
             </div>
+          </div>
+        )}
+
+        {/* TAB 6: BULK IMPORT QUESTION BANK (HTML + IMAGES FOLDER IMPORT) */}
+        {activeTab === 'bulk_import' && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="font-display font-extrabold text-xl text-white flex items-center gap-2.5">
+                  <FolderUp className="w-6 h-6 text-amber-400" />
+                  Bulk Import Question Bank (Folder HTML + Sơ Đồ Ảnh)
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  Import 1 lần duy nhất toàn bộ thư mục khóa học chứa file .html, file .csv và thư mục sơ đồ ảnh (.files).
+                </p>
+              </div>
+            </div>
+
+            {/* Step 1: Select Target Course & Drag-Drop Folder Area */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              
+              {/* Left Column: Config & Selection */}
+              <div className="bg-slate-800 border border-slate-700 p-6 rounded-2xl space-y-5">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-blue-400" />
+                    1. Chọn Khóa Học Cần Thay Thế Ngân Hàng Câu Hỏi:
+                  </label>
+                  <select
+                    value={bulkCourseId}
+                    onChange={(e) => setBulkCourseId(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-white font-bold outline-none focus:border-amber-500 shadow-inner"
+                  >
+                    {sortedCourses.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.title} ({c.mockExam?.length || 0} câu hiện tại)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="border-t border-slate-700/80 pt-4 space-y-3">
+                  <span className="text-xs font-bold text-slate-200 block">
+                    2. Chọn Hoặc Kéo Thả Thư Mục Khóa Học:
+                  </span>
+                  
+                  <button
+                    type="button"
+                    onClick={() => bulkFolderInputRef.current?.click()}
+                    disabled={bulkProcessing}
+                    className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs py-3 px-4 rounded-xl shadow-lg flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-50"
+                  >
+                    <FolderInput className="w-4 h-4" />
+                    <span>Chọn Thư Mục Từ Máy Tính</span>
+                  </button>
+
+                  <input
+                    type="file"
+                    ref={bulkFolderInputRef}
+                    // @ts-ignore
+                    webkitdirectory=""
+                    directory=""
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files.length > 0) {
+                        processFolderFiles(e.target.files);
+                      }
+                    }}
+                  />
+
+                  <p className="text-[11px] text-slate-400 leading-relaxed italic">
+                    💡 Chọn thư mục khóa học (ví dụ: <strong className="text-amber-300">AI Agentic</strong>, <strong className="text-amber-300">Architecture O11</strong>...) trong ổ đĩa của bạn. Hệ thống sẽ tự động quét các file .html, .csv và ảnh trong folder .files.
+                  </p>
+                </div>
+              </div>
+
+              {/* Right Column: Big Drag & Drop Zone */}
+              <div className="lg:col-span-2">
+                <div
+                  onDrop={handleDropFolder}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDragOver(true);
+                  }}
+                  onDragLeave={() => setIsDragOver(false)}
+                  className={`h-full min-h-[260px] border-2 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center text-center transition-all ${
+                    isDragOver
+                      ? 'border-amber-400 bg-amber-500/10 scale-[1.01]'
+                      : 'border-slate-700 bg-slate-800/60 hover:border-slate-600'
+                  }`}
+                >
+                  <FolderUp className={`w-16 h-16 mb-4 transition-transform ${isDragOver ? 'text-amber-400 scale-110 animate-bounce' : 'text-slate-500'}`} />
+                  <h3 className="font-display font-bold text-base text-white">
+                    Kéo & Thả Cả Thư Mục Khóa Học Vào Đây
+                  </h3>
+                  <p className="text-xs text-slate-400 max-w-md mt-1">
+                    (Drag & drop the entire course directory containing .html files and .files image folders)
+                  </p>
+                  <span className="inline-block mt-4 px-3 py-1 bg-slate-900 border border-slate-700 rounded-full text-[11px] font-mono text-amber-300">
+                    Hỗ trợ đọc đồng bộ HTML, CSV & Ảnh Sơ Đồ Base64
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Status Notifications */}
+            {bulkStatusMsg && (
+              <div className="bg-amber-900/30 border border-amber-500/40 p-4 rounded-xl text-xs text-amber-200 font-medium flex items-center gap-3">
+                <Sparkles className="w-5 h-5 text-amber-400 shrink-0 animate-spin" />
+                <span>{bulkStatusMsg}</span>
+              </div>
+            )}
+
+            {bulkErrorMsg && (
+              <div className="bg-rose-900/40 border border-rose-500/50 p-4 rounded-xl text-xs text-rose-200 font-bold flex items-center gap-3">
+                <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />
+                <span>{bulkErrorMsg}</span>
+              </div>
+            )}
+
+            {bulkSuccessMsg && (
+              <div className="bg-emerald-900/40 border border-emerald-500/50 p-4 rounded-xl text-xs text-emerald-200 font-bold flex items-center gap-3">
+                <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                <span>{bulkSuccessMsg}</span>
+              </div>
+            )}
+
+            {/* Step 2: Parsed Result Summary & Confirmation Box */}
+            {bulkParsedQuestions.length > 0 && (
+              <div className="bg-slate-800 border border-amber-500/50 rounded-2xl p-6 space-y-6 shadow-xl">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-700 pb-4">
+                  <div>
+                    <h3 className="font-display font-extrabold text-lg text-white flex items-center gap-2">
+                      <Zap className="w-5 h-5 text-amber-400" />
+                      Kết Quả Phân Tích Thư Mục Đề Thi
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Xem lại tổng quan các bộ đề đã trích xuất trước khi tiến hành ghi đè thay thế ngân hàng câu hỏi.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleExecuteBulkReplace}
+                    disabled={bulkProcessing}
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs px-6 py-3 rounded-xl shadow-lg flex items-center gap-2 cursor-pointer transition-all disabled:opacity-50 shrink-0"
+                  >
+                    <Zap className="w-4 h-4 fill-white" />
+                    <span>⚡ REPLACE ENTIRE QUESTION BANK</span>
+                  </button>
+                </div>
+
+                {/* Stat Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div className="bg-slate-900 border border-slate-700 p-4 rounded-xl text-center">
+                    <span className="text-[10px] text-slate-400 font-mono uppercase block">Khóa Học Mục Tiêu</span>
+                    <strong className="text-xs text-amber-400 truncate block mt-1">
+                      {sortedCourses.find(c => c.id === bulkCourseId)?.title || bulkCourseId}
+                    </strong>
+                  </div>
+
+                  <div className="bg-slate-900 border border-slate-700 p-4 rounded-xl text-center">
+                    <span className="text-[10px] text-slate-400 font-mono uppercase block">Số Bộ Đề (Sets)</span>
+                    <strong className="text-base text-white font-black block mt-1">
+                      {bulkParsedSets.length} Bộ Đề
+                    </strong>
+                  </div>
+
+                  <div className="bg-slate-900 border border-slate-700 p-4 rounded-xl text-center">
+                    <span className="text-[10px] text-slate-400 font-mono uppercase block">Tổng Số Câu Hỏi</span>
+                    <strong className="text-base text-emerald-400 font-black block mt-1">
+                      {bulkParsedQuestions.length} Câu
+                    </strong>
+                  </div>
+
+                  <div className="bg-slate-900 border border-slate-700 p-4 rounded-xl text-center">
+                    <span className="text-[10px] text-slate-400 font-mono uppercase block">Ảnh Sơ Đồ Đã Nhúng</span>
+                    <strong className="text-base text-blue-400 font-black block mt-1">
+                      {bulkImgCount} Sơ Đồ
+                    </strong>
+                  </div>
+                </div>
+
+                {/* Parsed Sets Breakdown */}
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold text-slate-300 uppercase font-mono">
+                    Danh Sách Các Bộ Đề Đã Phát Hiện:
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {bulkParsedSets.map((set, i) => (
+                      <div key={set.id || i} className="bg-slate-900 border border-slate-700 p-3.5 rounded-xl flex items-center justify-between">
+                        <div>
+                          <strong className="text-xs text-white block">{set.title}</strong>
+                          <span className="text-[11px] text-slate-400">{set.questions.length} câu hỏi trắc nghiệm</span>
+                        </div>
+                        <span className="text-[10px] font-mono bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold">
+                          READY
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
