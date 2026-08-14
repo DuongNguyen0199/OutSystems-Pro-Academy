@@ -528,7 +528,7 @@ export default function AdminDashboard({
   };
 
   // --------------------------------------------------------------------------
-  // BULK FOLDER IMPORT LOGIC (HTML + CSV + .files Image Folders)
+  // BULK FOLDER IMPORT LOGIC (CSV-First + HTML Image Enrichment)
   // --------------------------------------------------------------------------
   const processFolderFiles = async (filesList: File[] | FileList) => {
     setBulkProcessing(true);
@@ -565,17 +565,18 @@ export default function AdminDashboard({
         }
       }
 
+      const csvFiles = filesArr.filter(f => /\.csv$/i.test(f.name));
       const htmlFiles = filesArr.filter(f => /\.(html?|htm)$/i.test(f.name));
       const imgFiles = filesArr.filter(f => /\.(png|jpe?g|gif|svg|webp)$/i.test(f.name));
 
-      if (htmlFiles.length === 0) {
-        setBulkErrorMsg('Không tìm thấy file .html nào trong thư mục đã chọn. Vui lòng kéo thả toàn bộ thư mục khóa học chứa các file .html và folder .files.');
+      if (csvFiles.length === 0 && htmlFiles.length === 0) {
+        setBulkErrorMsg('Không tìm thấy file .csv hoặc .html nào trong thư mục đã chọn.');
         setBulkProcessing(false);
         return;
       }
 
       // Step 1: Convert image files to Base64
-      setBulkStatusMsg(`Đang đọc & chuyển đổi ${imgFiles.length} sơ đồ hình ảnh sang mã nhúng Base64...`);
+      setBulkStatusMsg(`Đang đọc & chuyển đổi ${imgFiles.length} file hình ảnh sơ đồ sang mã nhúng Base64...`);
       const imageMap: Record<string, string> = {};
 
       for (const imgFile of imgFiles) {
@@ -598,19 +599,12 @@ export default function AdminDashboard({
         }
       }
 
-      // Step 2: Read and parse each HTML file using native Browser DOMParser
-      setBulkStatusMsg(`Đang phân tích chi tiết nội dung ${htmlFiles.length} file HTML đề thi...`);
-      const parsedSetsArr: ExamSet[] = [];
-      const allQsArr: MockExamQuestion[] = [];
-      let totalImgExtracted = 0;
-
-      // Sort HTML files numerically
-      htmlFiles.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
-
+      // Step 2: Build Question Text -> Base64 Image Map from HTML files
+      setBulkStatusMsg(`Đang quét ${htmlFiles.length} file HTML để bóc tách các sơ đồ hình ảnh...`);
+      const htmlImageMap: Record<string, string> = {};
       const parser = new DOMParser();
 
-      for (let sIdx = 0; sIdx < htmlFiles.length; sIdx++) {
-        const htmlFile = htmlFiles[sIdx];
+      for (const htmlFile of htmlFiles) {
         const htmlContent = await new Promise<string>((resolve) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result as string);
@@ -618,124 +612,166 @@ export default function AdminDashboard({
           reader.readAsText(htmlFile);
         });
 
-        let setTitle = `Dump 0${sIdx + 1}`;
-        const fname = htmlFile.name.toLowerCase();
-        if (fname.includes('dump01') || fname.includes('dump 01')) setTitle = 'Dump 01';
-        else if (fname.includes('dump02') || fname.includes('dump 02')) setTitle = 'Dump 02';
-        else if (fname.includes('dump03') || fname.includes('dump 03')) setTitle = 'Dump 03';
-        else if (fname.includes('dump04') || fname.includes('dump 04')) setTitle = 'Dump 04';
-        else if (fname.includes('dump05') || fname.includes('dump 05')) setTitle = 'Dump 05';
-        else if (fname.includes('dump06') || fname.includes('dump 06')) setTitle = 'Dump 06';
-        else if (fname.includes('practice') || fname.includes('detailed')) {
-          setTitle = `Practice Test ${sIdx + 1}`;
-        }
-
         const doc = parser.parseFromString(htmlContent, 'text/html');
+        const questionNodes = Array.from(doc.querySelectorAll('.result-pane--question-result-pane-wrapper--2bGiz, [class*="question-result-pane-wrapper"], #question-prompt'));
 
-        // Query top-level question wrapper cards ONLY
-        let questionNodes = Array.from(doc.querySelectorAll('.result-pane--question-result-pane-wrapper--2bGiz, [class*="question-result-pane-wrapper"]'));
+        questionNodes.forEach(node => {
+          const promptEl = node.querySelector('#question-prompt, [id^="question-prompt"], .result-pane--question-format--PBvdY') || node;
+          const imgEl = node.querySelector('img') || promptEl.querySelector('img');
+          const questionText = promptEl.textContent?.replace(/\s+/g, ' ').trim();
 
-        if (questionNodes.length === 0) {
-          questionNodes = Array.from(doc.querySelectorAll('#question-prompt, [id^="question-prompt"]'))
-            .map(el => el.closest('.result-pane--question-result-pane-wrapper--2bGiz, [class*="question-result-pane-wrapper"]') || el.closest('.result-pane--question-result-pane--sIcOh'))
-            .filter(Boolean) as Element[];
-        }
-
-        // Deduplicate nodes
-        const uniqueNodes = Array.from(new Set(questionNodes)).filter(Boolean);
-        const setQs: MockExamQuestion[] = [];
-
-        uniqueNodes.forEach((node, qIdx) => {
-          const promptEl = node.querySelector('#question-prompt, [id^="question-prompt"], .result-pane--question-format--PBvdY, [class*="question-format"]');
-          let questionText = promptEl ? promptEl.textContent?.trim() : '';
-
-          if (!questionText) return;
-
-          // Check image in prompt or question node
-          let imageUrl: string | undefined = undefined;
-          const imgEl = node.querySelector('img');
-          if (imgEl) {
+          if (imgEl && questionText) {
             const rawSrc = imgEl.getAttribute('src') || '';
             const fileNameOnly = rawSrc.split(/[/\\]/).pop()?.toLowerCase() || '';
             const foundBase64 = imageMap[fileNameOnly] || imageMap[rawSrc.toLowerCase()];
             if (foundBase64) {
-              imageUrl = foundBase64;
-              totalImgExtracted++;
+              const cleanKey = questionText.toLowerCase();
+              htmlImageMap[cleanKey] = foundBase64;
+              htmlImageMap[cleanKey.substring(0, 60)] = foundBase64;
             }
-          }
-
-          questionText = questionText.replace(/\s+/g, ' ').trim();
-
-          // Scope choices query STRICTLY inside the expanded content section of THIS SPECIFIC node
-          const expandedContent = node.querySelector('.result-pane--question-result-pane-expanded-content--Og5Vc, [class*="expanded-content"]') || node;
-          const answerNodes = Array.from(expandedContent.querySelectorAll('.result-pane--answer-result-pane--Niazi, [class*="answer-result-pane"]'));
-
-          const choices: { key: string; text: string }[] = [];
-          let correctKey = 'A';
-          const keys = ['A', 'B', 'C', 'D', 'E', 'F'];
-
-          answerNodes.forEach((ansNode) => {
-            // Guard: Never allow more than 6 choices for a single question
-            if (choices.length >= 6) return;
-
-            const isCorrect = ansNode.querySelector('.answer-result-pane--answer-correct--PLOEU, [class*="answer-correct"]') !== null ||
-                              ansNode.textContent?.includes('Câu trả lời đúng') ||
-                              ansNode.textContent?.includes('Correct answer');
-            const textEl = ansNode.querySelector('#answer-text, [id^="answer-text"], .ud-heading-md, [class*="answer-body"]');
-            let text = textEl ? textEl.textContent?.trim() : ansNode.textContent?.trim();
-
-            if (text) {
-              text = text.replace(/Câu trả lời đúng|Correct answer/gi, '').replace(/\s+/g, ' ').trim();
-              if (text.length > 0) {
-                const key = keys[choices.length] || 'A';
-                choices.push({ key, text });
-                if (isCorrect) correctKey = key;
-              }
-            }
-          });
-
-          // Explanation
-          let explanation = 'Official OutSystems Exam Question';
-          const expEl = node.querySelector('.result-pane--explanation, [class*="explanation"]');
-          if (expEl && expEl.textContent) {
-            explanation = expEl.textContent.replace(/\s+/g, ' ').trim();
-          }
-
-          if (questionText && choices.length >= 2) {
-            const qObj: MockExamQuestion = {
-              id: `q_bulk_${sIdx+1}_${qIdx+1}`,
-              question: questionText,
-              choices: choices,
-              correctAnswer: correctKey,
-              explanation: explanation,
-              imageUrl: imageUrl
-            };
-            setQs.push(qObj);
-            allQsArr.push(qObj);
           }
         });
+      }
 
-        if (setQs.length > 0) {
-          parsedSetsArr.push({
-            id: `set-bulk-${sIdx+1}`,
-            title: setTitle,
-            description: `Bài kiểm tra thực hành ${setTitle}`,
-            durationMinutes: 90,
-            passingScorePct: 70,
-            randomizeQuestions: false,
-            questions: setQs
+      // Step 3: Parse CSV Files as Primary Question Bank Source (1.csv, 2.csv, 3.csv...)
+      const parsedSetsArr: ExamSet[] = [];
+      const allQsArr: MockExamQuestion[] = [];
+      let totalImgAttached = 0;
+
+      const parseCsvLine = (line: string) => {
+        const result: string[] = [];
+        let cur = '';
+        let inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+          const c = line[i];
+          if (c === '"') {
+            if (inQuotes && line[i+1] === '"') { cur += '"'; i++; }
+            else { inQuotes = !inQuotes; }
+          } else if (c === ',' && !inQuotes) {
+            result.push(cur.trim()); cur = '';
+          } else { cur += c; }
+        }
+        result.push(cur.trim());
+        return result;
+      };
+
+      if (csvFiles.length > 0) {
+        setBulkStatusMsg(`Đang trích xuất dữ liệu chuẩn 4 đáp án A-B-C-D từ ${csvFiles.length} file CSV (1.csv, 2.csv...)...`);
+
+        // Sort CSV files numerically (1.csv, 2.csv, 3.csv...)
+        csvFiles.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+
+        for (let sIdx = 0; sIdx < csvFiles.length; sIdx++) {
+          const csvFile = csvFiles[sIdx];
+          const csvContent = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = () => resolve('');
+            reader.readAsText(csvFile);
           });
+
+          const lines = csvContent.split(/\r?\n/).filter(l => l.trim() !== '');
+          if (lines.length <= 1) continue;
+
+          let setTitle = `Dump 0${sIdx + 1}`;
+          const fname = csvFile.name.toLowerCase();
+          if (fname.includes('1.csv')) setTitle = 'Dump 01';
+          else if (fname.includes('2.csv')) setTitle = 'Dump 02';
+          else if (fname.includes('3.csv')) setTitle = 'Dump 03';
+          else if (fname.includes('4.csv')) setTitle = 'Dump 04';
+          else if (fname.includes('5.csv')) setTitle = 'Dump 05';
+          else if (fname.includes('6.csv')) setTitle = 'Dump 06';
+
+          const setQs: MockExamQuestion[] = [];
+
+          // Detect column indices from header row
+          const headerCells = parseCsvLine(lines[0]).map(h => h.toLowerCase());
+          let qIdxCol = 0;
+          let opt1Col = 2;
+          let opt2Col = 4;
+          let opt3Col = 6;
+          let opt4Col = 8;
+          let correctCol = 14;
+          let expCol = 15;
+
+          headerCells.forEach((h, colIdx) => {
+            if (h === 'question') qIdxCol = colIdx;
+            else if (h.includes('option 1')) opt1Col = colIdx;
+            else if (h.includes('option 2')) opt2Col = colIdx;
+            else if (h.includes('option 3')) opt3Col = colIdx;
+            else if (h.includes('option 4')) opt4Col = colIdx;
+            else if (h.includes('correct')) correctCol = colIdx;
+            else if (h.includes('explanation')) expCol = colIdx;
+          });
+
+          for (let i = 1; i < lines.length; i++) {
+            const cells = parseCsvLine(lines[i]);
+            if (cells.length < 3) continue;
+
+            const qText = cells[qIdxCol] || cells[0];
+            const optA = cells[opt1Col] || cells[2] || '';
+            const optB = cells[opt2Col] || cells[4] || '';
+            const optC = cells[opt3Col] || cells[6] || '';
+            const optD = cells[opt4Col] || cells[8] || '';
+
+            const rawCorrect = cells[correctCol] || cells[14] || cells[5] || '1';
+            let correctKey = 'A';
+            const rUpper = rawCorrect.trim().toUpperCase();
+            if (rUpper === '1' || rUpper === 'A') correctKey = 'A';
+            else if (rUpper === '2' || rUpper === 'B') correctKey = 'B';
+            else if (rUpper === '3' || rUpper === 'C') correctKey = 'C';
+            else if (rUpper === '4' || rUpper === 'D') correctKey = 'D';
+
+            const explanation = cells[expCol] || cells[15] || 'Official OutSystems Exam Question';
+
+            const choices: { key: string; text: string }[] = [];
+            if (optA) choices.push({ key: 'A', text: optA });
+            if (optB) choices.push({ key: 'B', text: optB });
+            if (optC) choices.push({ key: 'C', text: optC });
+            if (optD) choices.push({ key: 'D', text: optD });
+
+            if (qText && choices.length >= 2) {
+              const cleanKey = qText.replace(/\s+/g, ' ').trim().toLowerCase();
+              const prefixKey = cleanKey.substring(0, 60);
+              const imageUrl = htmlImageMap[cleanKey] || htmlImageMap[prefixKey] || undefined;
+
+              if (imageUrl) totalImgAttached++;
+
+              const qObj: MockExamQuestion = {
+                id: `q_csv_${sIdx+1}_${i}`,
+                question: qText,
+                choices: choices,
+                correctAnswer: correctKey,
+                explanation: explanation,
+                imageUrl: imageUrl
+              };
+              setQs.push(qObj);
+              allQsArr.push(qObj);
+            }
+          }
+
+          if (setQs.length > 0) {
+            parsedSetsArr.push({
+              id: `set-csv-${sIdx+1}`,
+              title: setTitle,
+              description: `Bài kiểm tra thực hành ${setTitle}`,
+              durationMinutes: 90,
+              passingScorePct: 70,
+              randomizeQuestions: false,
+              questions: setQs
+            });
+          }
         }
       }
 
       setBulkParsedSets(parsedSetsArr);
       setBulkParsedQuestions(allQsArr);
-      setBulkImgCount(totalImgExtracted);
+      setBulkImgCount(totalImgAttached);
 
       if (allQsArr.length > 0) {
-        setBulkSuccessMsg(`🎉 PHÂN TÍCH THƯ MỤC HOÀN TẤT! Đã bóc tách thành công ${allQsArr.length} câu hỏi thuộc ${parsedSetsArr.length} bộ đề (${totalImgExtracted} sơ đồ ảnh). Hãy bấm nút "⚡ REPLACE ENTIRE QUESTION BANK" bên dưới để hoàn tất lưu lên hệ thống!`);
+        setBulkSuccessMsg(`🎉 PHÂN TÍCH CSV & NỔI ẢNH SƠ ĐỒ HOÀN TẤT! Đã bóc tách thành công ${allQsArr.length} câu hỏi chuẩn 4 đáp án A-B-C-D thuộc ${parsedSetsArr.length} bộ đề (đã ghép ${totalImgAttached} sơ đồ ảnh). Hãy bấm nút "⚡ REPLACE ENTIRE QUESTION BANK" bên dưới để hoàn tất lưu lên hệ thống!`);
       } else {
-        setBulkErrorMsg('Phân tích thư mục hoàn tất nhưng không tìm thấy câu hỏi hợp lệ trong các file HTML.');
+        setBulkErrorMsg('Phân tích hoàn tất nhưng không tìm thấy câu hỏi hợp lệ trong các file CSV.');
       }
     } catch (err: any) {
       setBulkErrorMsg(`Lỗi khi đọc thư mục: ${err.message}`);
