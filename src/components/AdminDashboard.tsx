@@ -632,13 +632,13 @@ export default function AdminDashboard({
 
         const doc = parser.parseFromString(htmlContent, 'text/html');
 
-        // Query question wrapper cards using multiple selectors
+        // Query top-level question wrapper cards ONLY
         let questionNodes = Array.from(doc.querySelectorAll('.result-pane--question-result-pane-wrapper--2bGiz, [class*="question-result-pane-wrapper"]'));
+
         if (questionNodes.length === 0) {
-          questionNodes = Array.from(doc.querySelectorAll('.result-pane--question-result-pane--sIcOh, [class*="question-result-pane"]')).filter(el => !el.classList.contains('result-pane--question-result-pane-expanded-content--Og5Vc'));
-        }
-        if (questionNodes.length === 0) {
-          questionNodes = Array.from(doc.querySelectorAll('#question-prompt, [id^="question-prompt"]')).map(el => el.closest('div[class*="result-pane"]') || el.parentElement || el);
+          questionNodes = Array.from(doc.querySelectorAll('#question-prompt, [id^="question-prompt"]'))
+            .map(el => el.closest('.result-pane--question-result-pane-wrapper--2bGiz, [class*="question-result-pane-wrapper"]') || el.closest('.result-pane--question-result-pane--sIcOh'))
+            .filter(Boolean) as Element[];
         }
 
         // Deduplicate nodes
@@ -666,13 +666,18 @@ export default function AdminDashboard({
 
           questionText = questionText.replace(/\s+/g, ' ').trim();
 
-          // Choices
-          const answerNodes = node.querySelectorAll('.result-pane--answer-result-pane--Niazi, [class*="answer-result-pane"]');
+          // Scope choices query STRICTLY inside the expanded content section of THIS SPECIFIC node
+          const expandedContent = node.querySelector('.result-pane--question-result-pane-expanded-content--Og5Vc, [class*="expanded-content"]') || node;
+          const answerNodes = Array.from(expandedContent.querySelectorAll('.result-pane--answer-result-pane--Niazi, [class*="answer-result-pane"]'));
+
           const choices: { key: string; text: string }[] = [];
           let correctKey = 'A';
           const keys = ['A', 'B', 'C', 'D', 'E', 'F'];
 
-          answerNodes.forEach((ansNode, aIdx) => {
+          answerNodes.forEach((ansNode) => {
+            // Guard: Never allow more than 6 choices for a single question
+            if (choices.length >= 6) return;
+
             const isCorrect = ansNode.querySelector('.answer-result-pane--answer-correct--PLOEU, [class*="answer-correct"]') !== null ||
                               ansNode.textContent?.includes('Câu trả lời đúng') ||
                               ansNode.textContent?.includes('Correct answer');
@@ -681,9 +686,11 @@ export default function AdminDashboard({
 
             if (text) {
               text = text.replace(/Câu trả lời đúng|Correct answer/gi, '').replace(/\s+/g, ' ').trim();
-              const key = keys[aIdx] || 'A';
-              choices.push({ key, text });
-              if (isCorrect) correctKey = key;
+              if (text.length > 0) {
+                const key = keys[choices.length] || 'A';
+                choices.push({ key, text });
+                if (isCorrect) correctKey = key;
+              }
             }
           });
 
