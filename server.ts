@@ -1760,22 +1760,42 @@ const handleAiExplainRequest = async (req: express.Request, res: express.Respons
         const genAI = new GoogleGenerativeAI(geminiApiKey);
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-        const aiPrompt = `You are a Principal OutSystems Certified Enterprise Architect & Lead Certification Instructor.
-Explain this OutSystems exam question in deep, expert detail in Vietnamese.
+        const optionsBreakdown = targetChoices.length > 0 
+          ? targetChoices.map((c: any) => `- Option ${c.key}: "${c.text}"`).join('\n')
+          : '';
 
-Course: ${courseTitle || 'OutSystems Certification'}
-Question: ${targetQuestion}
-Choices: ${JSON.stringify(targetChoices)}
-Correct Answer: ${targetCorrectKey} (${correctText})
-User Selected: ${targetUserKey}
+        const incorrectOptionsList = targetChoices
+          .filter((c: any) => c.key !== targetCorrectKey)
+          .map((c: any) => `- **Option ${c.key} ("${c.text}"):** Explain why this option is incorrect or sub-optimal in this specific scenario.`)
+          .join('\n');
+
+        const aiPrompt = `You are a Principal OutSystems Certified Enterprise Architect & Senior Certification Instructor.
+Explain this OutSystems exam question in deep, technical detail in ENGLISH.
+
+Course Context: ${courseTitle || 'OutSystems Certification'}
+Question Scenario: ${targetQuestion}
+Options Provided:
+${optionsBreakdown}
+
+Correct Answer Key: ${targetCorrectKey} (${correctText})
+Candidate's Selected Answer: ${targetUserKey}
 Official Brief Note: ${baseExplanation}
 
-Formatting requirement:
-Respond as a top 1% OutSystems Enterprise Architect. Structure clearly:
-🎯 **Đáp án đúng:** ${targetCorrectKey}. ${correctText}
-💡 **Góc nhìn OutSystems Expert (Deep Dive):** (Explain core Architecture Canvas rules, Reactive/ODC runtime, Database/Data Isolation, Server vs Service Actions, or Performance Best Practices).
-❌ **Tại sao các phương án khác chưa tối ưu/sai:** (Briefly highlight flaws in wrong options).
-🚀 **Bí kíp thi chứng chỉ (Exam Tip):** (Important keyword to remember for OutSystems exam).`;
+Formatting & Content Requirements (Respond in ENGLISH):
+Respond as a top 1% OutSystems Principal Architect. Structure your response clearly into 4 sections:
+
+🎯 **Correct Answer: Option ${targetCorrectKey} — "${correctText}"**
+Explain in technical detail why Option ${targetCorrectKey} is correct specifically within the scenario and requirements described in the question prompt.
+
+💡 **OutSystems Architect Deep Dive:**
+Provide deep technical context based on OutSystems Architecture Canvas (O11 / ODC), runtime execution, database transaction isolation, server vs service actions, or performance best practices.
+
+❌ **Detailed Analysis of Incorrect Options:**
+Break down each incorrect option individually and explain why it fails or is inappropriate in this specific scenario:
+${incorrectOptionsList}
+
+🚀 **OutSystems Exam Pro Tip:**
+Provide a key architectural term or rule to remember for scenario-based exam questions on this topic.`;
 
         const result = await model.generateContent(aiPrompt);
         const text = result.response.text();
@@ -1787,27 +1807,31 @@ Respond as a top 1% OutSystems Enterprise Architect. Structure clearly:
       }
     }
 
-    // Expert Persona Output (OutSystems Principal Architect)
-    const expertOutput = `🎓 **Phân Tích Chuyên Gia OutSystems (OutSystems Certified Expert)**
+    // Expert Persona Output (OutSystems Principal Architect Fallback in English)
+    const incorrectChoicesList = targetChoices
+      .filter((c: any) => c.key !== targetCorrectKey)
+      .map((c: any) => `• **Option ${c.key} ("${c.text}"):** Incorrect for this scenario because it fails to satisfy the core requirements or introduces unnecessary runtime overhead.`)
+      .join('\n');
 
-🎯 **Đáp án chính xác:** **${targetCorrectKey}** — *"${correctText}"*
+    const expertOutput = `🎓 **OutSystems Principal Architect Exam Analysis**
 
-💡 **Phân Tích Chuyên Sâu Tích Hợp (Enterprise Architecture Deep Dive):**
-• **Nguyên lý cốt lõi OutSystems:** ${baseExplanation || `Đáp án ${targetCorrectKey} tuân thủ quy chuẩn thiết kế Architecture Canvas (3-Layer Canvas: Orchestration, End-User, Core, Foundation) của OutSystems.`}
-• **Tối ưu hóa Runtime & Performance:** Khi thiết kế ứng dụng OutSystems (Reactive Web hoặc ODC), việc đảm bảo Data Isolation, giảm tải Side-effects trong Data Fetching và tái sử dụng Service Actions là tiêu chuẩn bắt buộc để hệ thống đạt hiệu năng cao nhất.
+🎯 **Correct Answer:** **Option ${targetCorrectKey}** — *"${correctText}"*
 
-❌ **Tại Sao Các Lựa Chọn Khác Chưa Đúng:**
-Các phương án còn lại vi phạm quy tắc đóng gói Module (Tight Coupling), gây xung đột vòng đời ứng dụng (Lifecycle Hook Isolation) hoặc làm suy giảm hiệu năng xử lý ở tầng Database.
+💡 **Why Option ${targetCorrectKey} is Correct in this Scenario:**
+${baseExplanation ? `• **Official OutSystems Context:** ${baseExplanation}\n` : ''}• **Technical Rationale:** In the context of this scenario, Option ${targetCorrectKey} ("${correctText}") complies directly with OutSystems official patterns. It ensures proper architectural separation (3-Layer Canvas: Orchestration, End-User, Core, Foundation), maintains data isolation, and prevents performance bottlenecks during runtime execution.
 
-🚀 **Bí Kíp Thi Chứng Chỉ OutSystems (Exam Tip):**
-Luôn phân biệt rõ ràng giữa *Server Actions* (Chạy trên môi trường Server, dùng chung Transaction) và *Service Actions* (Chạy qua Rest/RPC nhẹ, độc lập Transaction). Từ khóa "${correctText}" luôn là sự lựa chọn chuẩn mực của OutSystems.`;
+❌ **Why the Other Options are Incorrect in this Scenario:**
+${incorrectChoicesList || `• **Other Options:** The remaining choices introduce architectural anti-patterns such as tight coupling between modules, improper lifecycle hook usage, or unhandled database transaction side-effects.`}
+
+🚀 **OutSystems Exam Pro Tip:**
+Always identify key scenario triggers (e.g., *Service Actions vs. Server Actions*, *Reactive Data Fetching*, *Asynchronous Events*, *Role Isolation*). OutSystems exam questions favor solutions that prioritize scalability, maintainability, and clean architecture separation.`;
 
     return res.json({ success: true, explanation: expertOutput });
   } catch (err: any) {
     console.error("AI Explain endpoint error:", err);
     return res.json({
       success: true,
-      explanation: "🎓 **OutSystems Expert Insight:** Đáp án đúng tuân theo quy chuẩn Architecture Canvas và tài liệu huấn luyện chính thức của OutSystems."
+      explanation: "🎓 **OutSystems Expert Insight:** The correct answer complies with OutSystems official Architecture Canvas and certification patterns."
     });
   }
 };
