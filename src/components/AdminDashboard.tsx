@@ -535,20 +535,47 @@ export default function AdminDashboard({
     setBulkStatusMsg('Đang đọc và quét các file trong thư mục...');
     setBulkErrorMsg('');
     setBulkSuccessMsg('');
+    setBulkParsedQuestions([]);
+    setBulkParsedSets([]);
 
     try {
       const filesArr = Array.from(filesList);
-      const htmlFiles = filesArr.filter(f => f.name.endsWith('.html'));
+
+      // Auto-detect course ID from folder name if available
+      const samplePath = (filesArr[0] as any)?.webkitRelativePath || '';
+      if (samplePath) {
+        const folderName = samplePath.split('/')[0].toLowerCase();
+        const matchedCourse = courses.find(c => {
+          const t = c.title.toLowerCase();
+          const id = c.id.toLowerCase();
+          return t.includes(folderName) || id.includes(folderName) || 
+            (folderName.includes('agentic') && t.includes('agentic')) ||
+            (folderName.includes('traditional') && t.includes('traditional')) ||
+            (folderName.includes('reactive') && t.includes('reactive')) ||
+            (folderName.includes('mobile') && t.includes('mobile')) ||
+            (folderName.includes('delivery') && t.includes('delivery')) ||
+            (folderName.includes('security') && t.includes('security')) ||
+            (folderName.includes('techlead') && t.includes('techlead')) ||
+            (folderName.includes('front-end') && t.includes('front-end')) ||
+            (folderName.includes('platform') && t.includes('platform')) ||
+            (folderName.includes('web specialist') && t.includes('web specialist'));
+        });
+        if (matchedCourse) {
+          setBulkCourseId(matchedCourse.id);
+        }
+      }
+
+      const htmlFiles = filesArr.filter(f => /\.(html?|htm)$/i.test(f.name));
       const imgFiles = filesArr.filter(f => /\.(png|jpe?g|gif|svg|webp)$/i.test(f.name));
 
       if (htmlFiles.length === 0) {
-        setBulkErrorMsg('Không tìm thấy file .html nào trong thư mục đã chọn. Vui lòng kéo thả toàn bộ thư mục khóa học chứa file .html và .files.');
+        setBulkErrorMsg('Không tìm thấy file .html nào trong thư mục đã chọn. Vui lòng kéo thả toàn bộ thư mục khóa học chứa các file .html và folder .files.');
         setBulkProcessing(false);
         return;
       }
 
       // Step 1: Convert image files to Base64
-      setBulkStatusMsg(`Đang xử lý & chuyển đổi ${imgFiles.length} file hình ảnh sơ đồ sang Base64...`);
+      setBulkStatusMsg(`Đang đọc & chuyển đổi ${imgFiles.length} sơ đồ hình ảnh sang mã nhúng Base64...`);
       const imageMap: Record<string, string> = {};
 
       for (const imgFile of imgFiles) {
@@ -572,7 +599,7 @@ export default function AdminDashboard({
       }
 
       // Step 2: Read and parse each HTML file
-      setBulkStatusMsg(`Đang phân tích cú pháp ${htmlFiles.length} file HTML đề thi...`);
+      setBulkStatusMsg(`Đang phân tích chi tiết nội dung ${htmlFiles.length} file HTML đề thi...`);
       const parsedSetsArr: ExamSet[] = [];
       const allQsArr: MockExamQuestion[] = [];
       let totalImgExtracted = 0;
@@ -601,7 +628,7 @@ export default function AdminDashboard({
           setTitle = `Practice Test ${sIdx + 1}`;
         }
 
-        const blocks = htmlContent.split(/result-pane--question-result-pane-wrapper/i);
+        const blocks = htmlContent.split(/result-pane--question-result-pane-wrapper|result-pane--question-result-pane/i);
         const setQs: MockExamQuestion[] = [];
 
         blocks.slice(1).forEach((block, qIdx) => {
@@ -674,11 +701,17 @@ export default function AdminDashboard({
       setBulkParsedSets(parsedSetsArr);
       setBulkParsedQuestions(allQsArr);
       setBulkImgCount(totalImgExtracted);
-      setBulkStatusMsg(`✅ Phân tích hoàn tất: Trích xuất thành công ${allQsArr.length} câu hỏi thuộc ${parsedSetsArr.length} bộ đề (${totalImgExtracted} sơ đồ đã nhúng Base64)!`);
+
+      if (allQsArr.length > 0) {
+        setBulkSuccessMsg(`🎉 PHÂN TÍCH THƯ MỤC HOÀN TẤT! Đã bóc tách thành công ${allQsArr.length} câu hỏi thuộc ${parsedSetsArr.length} bộ đề (${totalImgExtracted} sơ đồ ảnh). Hãy bấm nút "⚡ REPLACE ENTIRE QUESTION BANK" bên dưới để hoàn tất lưu lên hệ thống!`);
+      } else {
+        setBulkErrorMsg('Phân tích thư mục hoàn tất nhưng không tìm thấy câu hỏi hợp lệ trong các file HTML.');
+      }
     } catch (err: any) {
       setBulkErrorMsg(`Lỗi khi đọc thư mục: ${err.message}`);
     } finally {
       setBulkProcessing(false);
+      setBulkStatusMsg('');
     }
   };
 
@@ -734,7 +767,9 @@ export default function AdminDashboard({
     }
 
     setBulkProcessing(true);
-    setBulkStatusMsg('Đang lưu và đồng bộ toàn bộ Ngân hàng câu hỏi mới lên hệ thống...');
+    setBulkStatusMsg('Đang lưu và đồng bộ toàn bộ Ngân hàng câu hỏi mới lên Cơ sở dữ liệu Supabase...');
+    setBulkSuccessMsg('');
+    setBulkErrorMsg('');
 
     try {
       const res = await fetch('/api/admin/questions/bulk-replace-course', {
@@ -748,8 +783,11 @@ export default function AdminDashboard({
       });
       const data = await res.json();
       if (data.success) {
-        setBulkSuccessMsg(data.message || 'Thay thế ngân hàng câu hỏi thành công!');
         const targetCourse = courses.find(c => c.id === bulkCourseId);
+        const courseTitle = targetCourse ? targetCourse.title : bulkCourseId;
+
+        setBulkSuccessMsg(`✅ THÀNH CÔNG RỰC RỠ! ${data.message || `Đã thay thế toàn bộ Ngân hàng câu hỏi (${bulkParsedQuestions.length} câu) cho khóa học "${courseTitle}" lên Supabase!`}`);
+
         if (targetCourse) {
           targetCourse.mockExam = bulkParsedQuestions;
           targetCourse.examSets = bulkParsedSets;
@@ -762,6 +800,7 @@ export default function AdminDashboard({
       setBulkErrorMsg(`Lỗi kết nối: ${err.message}`);
     } finally {
       setBulkProcessing(false);
+      setBulkStatusMsg('');
     }
   };
 
