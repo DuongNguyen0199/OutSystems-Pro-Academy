@@ -113,6 +113,7 @@ export default function AdminDashboard({
   const [editImageUrl, setEditImageUrl] = useState('');
   const [editPlatform, setEditPlatform] = useState<'O11' | 'ODC'>('O11');
   const [editIsNew, setEditIsNew] = useState(false);
+  const [editPreviewLimit, setEditPreviewLimit] = useState<number>(10);
   const [courseSaveMsg, setCourseSaveMsg] = useState('');
 
   // Create New Course Popup Modal State
@@ -123,6 +124,7 @@ export default function AdminDashboard({
   const [newCourseImageUrl, setNewCourseImageUrl] = useState('');
   const [newCoursePlatform, setNewCoursePlatform] = useState<'O11' | 'ODC'>('O11');
   const [newCourseIsNew, setNewCourseIsNew] = useState(false);
+  const [newCoursePreviewLimit, setNewCoursePreviewLimit] = useState<number>(10);
   const [createCourseMsg, setCreateCourseMsg] = useState('');
 
   // CSV Import & Confirmation Modal State
@@ -356,6 +358,7 @@ export default function AdminDashboard({
     const platformTag = c.tags.find(t => t.text === 'O11' || t.text === 'ODC')?.text || 'O11';
     setEditPlatform(platformTag as 'O11' | 'ODC');
     setEditIsNew(c.tags.some(t => t.text === 'NEW'));
+    setEditPreviewLimit(c.previewLimit && c.previewLimit > 0 ? c.previewLimit : 10);
     setCourseSaveMsg('');
   };
 
@@ -397,6 +400,7 @@ export default function AdminDashboard({
       description: editDescription.trim(),
       price: Number(editPrice),
       imageUrl: editImageUrl.trim(),
+      previewLimit: Number(editPreviewLimit) || 10,
       tags: [
         { text: editPlatform, color: editPlatform === 'O11' ? 'purple' : 'orange' },
         ...(editIsNew ? [{ text: 'NEW', color: 'green' }] : [])
@@ -440,6 +444,7 @@ export default function AdminDashboard({
       description: newCourseDescription.trim() || 'Complete verified practice tests and exam dump questions.',
       price: Number(newCoursePrice),
       imageUrl: newCourseImageUrl.trim() || 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=600&auto=format&fit=crop&q=80',
+      previewLimit: Number(newCoursePreviewLimit) || 10,
       tags: [
         { text: newCoursePlatform, color: newCoursePlatform === 'O11' ? 'purple' : 'orange' },
         ...(newCourseIsNew ? [{ text: 'NEW', color: 'green' }] : [])
@@ -2817,28 +2822,28 @@ export default function AdminDashboard({
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
-                <div className="md:col-span-2 space-y-1">
-                  <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
-                    <span>Cover Image (URL or Local File Upload)</span>
-                    <span className="text-[10px] text-blue-400 font-normal">Stored as Binary Base64</span>
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
+                  <span>Cover Image (URL or Local File Upload)</span>
+                  <span className="text-[10px] text-blue-400 font-normal">Stored as Binary Base64</span>
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={editImageUrl}
+                    onChange={(e) => setEditImageUrl(e.target.value)}
+                    placeholder="https://... or upload file"
+                    className="flex-1 bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-300 font-mono outline-none focus:border-blue-500"
+                  />
+                  <label className="bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs px-3 py-2.5 rounded-xl border border-slate-600 flex items-center gap-1 cursor-pointer shrink-0">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Upload Local</span>
+                    <input type="file" accept="image/*" className="hidden" onChange={handleCourseImageFileUpload} />
                   </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={editImageUrl}
-                      onChange={(e) => setEditImageUrl(e.target.value)}
-                      placeholder="https://... or upload file"
-                      className="flex-1 bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-300 font-mono outline-none focus:border-blue-500"
-                    />
-                    <label className="bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs px-3 py-2.5 rounded-xl border border-slate-600 flex items-center gap-1 cursor-pointer shrink-0">
-                      <Upload className="w-3.5 h-3.5" />
-                      <span>Upload Local</span>
-                      <input type="file" accept="image/*" className="hidden" onChange={handleCourseImageFileUpload} />
-                    </label>
-                  </div>
                 </div>
+              </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-slate-300">Platform Tag</label>
                   <select
@@ -2849,6 +2854,20 @@ export default function AdminDashboard({
                     <option value="O11">O11 Platform</option>
                     <option value="ODC">ODC Platform</option>
                   </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-300">Số Lượng Câu Hỏi Preview (Preview Limit)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    required
+                    value={editPreviewLimit}
+                    onChange={(e) => setEditPreviewLimit(Number(e.target.value))}
+                    placeholder="e.g. 10"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-blue-400 font-mono font-bold outline-none focus:border-blue-500"
+                  />
                 </div>
               </div>
 
@@ -3172,7 +3191,7 @@ export default function AdminDashboard({
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-slate-300">Giá Khóa Học ($ USD)</label>
                   <input
@@ -3196,6 +3215,19 @@ export default function AdminDashboard({
                     <option value="O11">O11 (OutSystems 11)</option>
                     <option value="ODC">ODC (OutSystems Developer Cloud)</option>
                   </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-300">Số Câu Preview Miễn Phí</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    required
+                    value={newCoursePreviewLimit}
+                    onChange={(e) => setNewCoursePreviewLimit(Number(e.target.value))}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-blue-400 font-mono font-bold outline-none focus:border-emerald-500"
+                  />
                 </div>
               </div>
 

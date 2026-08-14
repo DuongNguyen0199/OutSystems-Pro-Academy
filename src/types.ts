@@ -40,6 +40,7 @@ export interface Course {
   previewQuestions: Question[];
   mockExam: MockExamQuestion[];
   examSets?: ExamSet[];
+  previewLimit?: number;
 }
 
 export interface UserProfile {

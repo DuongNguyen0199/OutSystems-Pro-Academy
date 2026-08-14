@@ -225,9 +225,7 @@ app.get("/api/courses", async (req, res) => {
         }
       }
 
-      const resolvedPrice = (item.price !== undefined && item.price !== null && item.price !== '' && !isNaN(Number(item.price)))
-        ? Number(item.price)
-        : (fallback ? Number(fallback.price) : 29.99);
+      const resolvedPreviewLimit = Number(item.preview_limit || item.previewLimit || (fallback ? fallback.previewLimit : 10)) || 10;
 
       return {
         id: item.id,
@@ -238,7 +236,8 @@ app.get("/api/courses", async (req, res) => {
         tags: tags,
         previewQuestions: fallback ? fallback.previewQuestions : [],
         mockExam: mockExam,
-        examSets: sets
+        examSets: sets,
+        previewLimit: resolvedPreviewLimit
       };
     });
 
@@ -718,10 +717,11 @@ repairSupabaseCoursesTable();
 // Course Management Endpoint (Role: Admin ONLY)
 app.post("/api/admin/courses/upsert", requireAdminAuth, async (req, res) => {
   try {
-    const { id, title, description, price, imageUrl, tags } = req.body;
+    const { id, title, description, price, imageUrl, tags, previewLimit } = req.body;
     const targetUuid = resolveCourseUuid(id);
     const platformTag = tags?.find((t: any) => t.text === 'O11' || t.text === 'ODC')?.text || 'O11';
     const isNewTag = tags?.some((t: any) => t.text === 'NEW') || false;
+    const pLimit = Number(previewLimit) || 10;
 
     // 1. Update ONLY the target course in-memory on the server FIRST
     const fIdx = fallbackCourses.findIndex(f => f.id === id || f.id === targetUuid);
@@ -732,7 +732,8 @@ app.post("/api/admin/courses/upsert", requireAdminAuth, async (req, res) => {
         description: description !== undefined ? description : fallbackCourses[fIdx].description,
         price: Number(price !== undefined ? price : fallbackCourses[fIdx].price),
         imageUrl: imageUrl || fallbackCourses[fIdx].imageUrl,
-        tags: tags || fallbackCourses[fIdx].tags
+        tags: tags || fallbackCourses[fIdx].tags,
+        previewLimit: pLimit
       };
     } else {
       fallbackCourses.push({
@@ -744,7 +745,8 @@ app.post("/api/admin/courses/upsert", requireAdminAuth, async (req, res) => {
         tags: tags || [{ text: 'O11', color: 'purple' }],
         previewQuestions: [],
         mockExam: [],
-        examSets: []
+        examSets: [],
+        previewLimit: pLimit
       });
     }
 
@@ -760,7 +762,8 @@ app.post("/api/admin/courses/upsert", requireAdminAuth, async (req, res) => {
       const extendedUpdate: Record<string, any> = {
         ...coreUpdate,
         platform: platformTag,
-        is_new: isNewTag
+        is_new: isNewTag,
+        preview_limit: pLimit
       };
       if (imageUrl) {
         extendedUpdate.image_url = imageUrl;

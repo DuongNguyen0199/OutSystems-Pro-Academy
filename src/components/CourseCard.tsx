@@ -22,10 +22,11 @@ export default function CourseCard({
 
   // Safe fallback to prevent blank/white screen if mockExam is undefined
   const safeMockExam = course.mockExam || [];
+  const previewLimit = course.previewLimit && course.previewLimit > 0 ? course.previewLimit : 10;
 
-  // Strictly select the FIRST 10 text-only questions (questions WITHOUT images) in fixed original order
+  // Strictly select the FIRST N text-only questions (questions WITHOUT images) in fixed original order
   const textOnlyQuestions = safeMockExam.filter(q => !q.imageUrl || q.imageUrl.trim() === '');
-  const previewQuestions = (textOnlyQuestions.length >= 10 ? textOnlyQuestions : safeMockExam).slice(0, 10);
+  const previewQuestions = (textOnlyQuestions.length >= previewLimit ? textOnlyQuestions : safeMockExam).slice(0, previewLimit);
 
   const getTagStyle = (color: string) => {
     switch (color) {
@@ -36,7 +37,7 @@ export default function CourseCard({
       case 'orange':
         return 'bg-orange-50 text-orange-700 border border-orange-150';
       case 'purple':
-        return 'bg-purple-50 text-purple-700 border border-purple-150';
+        return 'bg-purple-50 text-purple-700 border border-purple-200';
       default:
         return 'bg-slate-50 text-slate-700 border border-slate-200';
     }
@@ -74,7 +75,7 @@ export default function CourseCard({
             </div>
 
             {/* Badges / Tags */}
-            <div className="flex flex-wrap gap-1.5 mt-2.5">
+            <div className="flex flex-wrap gap-1.5 mt-2.5 items-center">
               {course.tags.map((tag, idx) => (
                 <span 
                   key={idx}
@@ -86,6 +87,11 @@ export default function CourseCard({
               {course.examSets && course.examSets.length > 0 && (
                 <span className="text-[10px] md:text-xs font-bold px-2 py-0.5 rounded-md tracking-wider bg-purple-50 text-purple-700 border border-purple-200">
                   {course.examSets.length} Dumps
+                </span>
+              )}
+              {safeMockExam.length > 0 && (
+                <span className="text-[10px] md:text-xs font-bold px-2 py-0.5 rounded-md tracking-wider bg-blue-50 text-blue-700 border border-blue-200">
+                  {safeMockExam.length} Questions
                 </span>
               )}
             </div>
@@ -151,7 +157,7 @@ export default function CourseCard({
               <div className="flex items-center justify-between bg-blue-50 border border-blue-200 p-3 rounded-xl text-xs font-semibold text-blue-900">
                 <span className="flex items-center gap-1.5">
                   <Sparkles className="w-4 h-4 text-blue-600" />
-                  Question Preview Mode (Free 10-Question Demo)
+                  Question Preview Mode (Free {previewQuestions.length}-Question Demo)
                 </span>
                 <span className="text-[11px] font-bold bg-blue-200 text-blue-900 px-2 py-0.5 rounded-md">
                   {previewQuestions.length} / {safeMockExam.length} Questions
