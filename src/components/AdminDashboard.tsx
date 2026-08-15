@@ -2526,8 +2526,8 @@ export default function AdminDashboard({
 
                     <div className="space-y-1.5">
                       <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
-                        <span>Admin Email Address</span>
-                        <span className="text-[10px] text-slate-500">Email đăng ký Resend / nhận thông báo</span>
+                        <span>Admin Email Address (Sender / Recipient)</span>
+                        <span className="text-[10px] text-slate-500">Email gửi & nhận thông báo</span>
                       </label>
                       <input
                         type="email"
@@ -2538,10 +2538,25 @@ export default function AdminDashboard({
                       />
                     </div>
 
-                    <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-[11px] text-slate-400 leading-relaxed space-y-1">
-                      <p className="font-bold text-slate-300">💡 Hướng dẫn gửi mail thành công 100%:</p>
-                      <p>• <strong>Resend Free (re_...):</strong> Nếu chưa add Domain tại resend.com/domains thì Resend chỉ cho gửi về email chính ({adminEmailSetting}). Muốn gửi tới email học viên ngẫu nhiên, bạn hãy thêm Domain trên Resend.</p>
-                      <p>• <strong>Brevo Free (xkeysib-...):</strong> Không cần Domain, dán Brevo API Key vào đây sẽ gửi được tới MỌI email học viên ngay lập tức!</p>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
+                        <span>Gmail App Password (Mật khẩu ứng dụng 16 ký tự)</span>
+                        <span className="text-[10px] text-amber-400">Dùng nếu gửi qua Gmail SMTP</span>
+                      </label>
+                      <input
+                        type="password"
+                        value={gmailAppPassword}
+                        onChange={(e) => setGmailAppPassword(e.target.value)}
+                        placeholder="e.g. abcd efgh ijkl mnop (16 ký tự)"
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-amber-300 font-mono outline-none focus:border-amber-500"
+                      />
+                    </div>
+
+                    <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 text-[11px] text-slate-400 leading-relaxed space-y-1.5">
+                      <p className="font-bold text-slate-200">💡 Hướng dẫn chọn phương thức gửi mail phù hợp:</p>
+                      <p>• <strong className="text-emerald-300">Cách 1 — Brevo Free (Khuyên dùng nhất):</strong> Đăng ký tại <a href="https://app.brevo.com/settings/keys/api" target="_blank" rel="noreferrer" className="underline text-emerald-400">brevo.com</a>, dán API Key (<code>xkeysib-...</code>) vào ô trên. Không cần domain, gửi được tới MỌI email học viên tức thì!</p>
+                      <p>• <strong className="text-blue-300">Cách 2 — Resend Free:</strong> Dán API Key (<code>re_...</code>) từ <a href="https://resend.com/api-keys" target="_blank" rel="noreferrer" className="underline text-blue-400">resend.com</a>. Nếu chưa verify Domain thì chỉ gửi về email admin ({adminEmailSetting}).</p>
+                      <p>• <strong className="text-amber-300">Cách 3 — Gmail SMTP:</strong> Điền Mật khẩu ứng dụng 16 ký tự lấy từ Google Account. Gửi qua SMTP Port 587.</p>
                     </div>
 
                     <button
