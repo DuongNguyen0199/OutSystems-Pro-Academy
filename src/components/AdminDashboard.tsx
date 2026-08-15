@@ -2491,15 +2491,31 @@ export default function AdminDashboard({
 
               <form onSubmit={handleSaveNotificationSettings} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Gmail SMTP Email Settings */}
+                  {/* Universal Email Dispatcher Settings */}
                   <div className="bg-slate-900 p-5 rounded-2xl border border-slate-700 space-y-4">
                     <div className="flex items-center justify-between">
                       <h3 className="font-display font-bold text-sm text-white flex items-center gap-2">
-                        <Mail className="w-4 h-4 text-emerald-400" /> Gmail SMTP Email Service
+                        <Mail className="w-4 h-4 text-emerald-400" /> Email Dispatcher Service
                       </h3>
                       <span className="bg-emerald-950 text-emerald-300 border border-emerald-800 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full">
-                        SMTP Port 587
+                        HTTPS Port 443 / SMTP
                       </span>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
+                        <span>Brevo API Key (Khuyên dùng trên Cloud Render)</span>
+                        <a href="https://app.brevo.com/settings/keys/api" target="_blank" rel="noreferrer" className="text-[10px] text-emerald-400 underline font-bold">
+                          Lấy API Key Brevo Miễn Phí ↗
+                        </a>
+                      </label>
+                      <input
+                        type="password"
+                        value={emailApiKey}
+                        onChange={(e) => setEmailApiKey(e.target.value)}
+                        placeholder="e.g. xkeysib-..."
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-emerald-400 font-mono outline-none focus:border-emerald-500 font-bold"
+                      />
                     </div>
 
                     <div className="space-y-1.5">
@@ -2521,12 +2537,11 @@ export default function AdminDashboard({
                       <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
                         <span>Gmail App Password (Mật khẩu ứng dụng 16 ký tự)</span>
                         <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer" className="text-[10px] text-amber-400 underline font-bold">
-                          Lấy mã tại Google ↗
+                          Google App Pass ↗
                         </a>
                       </label>
                       <input
                         type="password"
-                        required
                         value={gmailAppPassword}
                         onChange={(e) => setGmailAppPassword(e.target.value)}
                         placeholder="e.g. abcd efgh ijkl mnop (16 ký tự)"
@@ -2535,10 +2550,9 @@ export default function AdminDashboard({
                     </div>
 
                     <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 text-[11px] text-slate-400 leading-relaxed space-y-1.5">
-                      <p className="font-bold text-slate-200">💡 Hướng dẫn gửi mail qua Gmail SMTP 100%:</p>
-                      <p>• 1. Nhập <strong>Admin Email Address</strong> (ví dụ: <code>duongrbt@gmail.com</code>).</p>
-                      <p>• 2. Vào <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer" className="underline text-amber-400">myaccount.google.com/apppasswords</a> lấy chuỗi 16 ký tự Mật khẩu ứng dụng và dán vào ô trên.</p>
-                      <p>• 3. Bấm <strong>Save Notification Settings</strong> và thử gửi mail cho học viên!</p>
+                      <p className="font-bold text-slate-200">💡 Giải thích nguyên nhân Connection Timeout & Khắc phục 100%:</p>
+                      <p>• <strong className="text-rose-300">Tường lửa Render chặn cổng SMTP 587:</strong> Máy chủ Render Cloud tự động chặn các cổng TCP SMTP (587, 465) dẫn đến báo lỗi <em>Connection timeout</em> khi kết nối trực tiếp `smtp.gmail.com`.</p>
+                      <p>• <strong className="text-emerald-300">Giải pháp Brevo (xkeysib-...):</strong> Tạo API Key miễn phí tại <a href="https://app.brevo.com/settings/keys/api" target="_blank" rel="noreferrer" className="underline text-emerald-400">brevo.com</a> và dán vào ô trên. Brevo gửi qua Port 443 HTTPS **chạy 100% trên Render, không bị chặn và không cần domain**!</p>
                     </div>
 
                     <button
@@ -2548,7 +2562,7 @@ export default function AdminDashboard({
                       className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-2.5 rounded-xl cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg transition-all"
                     >
                       <Send className="w-3.5 h-3.5" />
-                      <span>{testingEmail ? 'Sending...' : 'Test Gmail SMTP Notification'}</span>
+                      <span>{testingEmail ? 'Sending...' : 'Test Email Dispatcher'}</span>
                     </button>
                   </div>
 
