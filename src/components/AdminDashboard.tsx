@@ -2491,46 +2491,25 @@ export default function AdminDashboard({
 
               <form onSubmit={handleSaveNotificationSettings} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Resend Email API Settings */}
+                  {/* Gmail SMTP Email Settings */}
                   <div className="bg-slate-900 p-5 rounded-2xl border border-slate-700 space-y-4">
                     <div className="flex items-center justify-between">
                       <h3 className="font-display font-bold text-sm text-white flex items-center gap-2">
-                        <Mail className="w-4 h-4 text-emerald-400" /> Resend API Email Service
+                        <Mail className="w-4 h-4 text-emerald-400" /> Gmail SMTP Email Service
                       </h3>
                       <span className="bg-emerald-950 text-emerald-300 border border-emerald-800 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full">
-                        HTTPS Port 443
+                        SMTP Port 587
                       </span>
                     </div>
 
                     <div className="space-y-1.5">
                       <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
-                        <span>Resend API Key (re_...) hoặc Brevo API Key (xkeysib-...)</span>
-                        <div className="flex items-center gap-2">
-                          <a href="https://resend.com/api-keys" target="_blank" rel="noreferrer" className="text-[10px] text-blue-400 underline font-bold">
-                            Resend ↗
-                          </a>
-                          <a href="https://app.brevo.com/settings/keys/api" target="_blank" rel="noreferrer" className="text-[10px] text-emerald-400 underline font-bold">
-                            Brevo ↗
-                          </a>
-                        </div>
-                      </label>
-                      <input
-                        type="password"
-                        required
-                        value={emailApiKey}
-                        onChange={(e) => setEmailApiKey(e.target.value)}
-                        placeholder="e.g. re_123456789... hoặc xkeysib-..."
-                        className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-emerald-400 font-mono outline-none focus:border-emerald-500 font-bold"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
                         <span>Admin Email Address (Sender / Recipient)</span>
-                        <span className="text-[10px] text-slate-500">Email gửi & nhận thông báo</span>
+                        <span className="text-[10px] text-slate-500">Email Admin gửi mã cho học viên</span>
                       </label>
                       <input
                         type="email"
+                        required
                         value={adminEmailSetting}
                         onChange={(e) => setAdminEmailSetting(e.target.value)}
                         placeholder="e.g. duongrbt@gmail.com"
@@ -2541,22 +2520,25 @@ export default function AdminDashboard({
                     <div className="space-y-1.5">
                       <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
                         <span>Gmail App Password (Mật khẩu ứng dụng 16 ký tự)</span>
-                        <span className="text-[10px] text-amber-400">Dùng nếu gửi qua Gmail SMTP</span>
+                        <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer" className="text-[10px] text-amber-400 underline font-bold">
+                          Lấy mã tại Google ↗
+                        </a>
                       </label>
                       <input
                         type="password"
+                        required
                         value={gmailAppPassword}
                         onChange={(e) => setGmailAppPassword(e.target.value)}
                         placeholder="e.g. abcd efgh ijkl mnop (16 ký tự)"
-                        className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-amber-300 font-mono outline-none focus:border-amber-500"
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-amber-300 font-mono outline-none focus:border-amber-500 font-bold"
                       />
                     </div>
 
                     <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 text-[11px] text-slate-400 leading-relaxed space-y-1.5">
-                      <p className="font-bold text-slate-200">💡 Hướng dẫn chọn phương thức gửi mail phù hợp:</p>
-                      <p>• <strong className="text-emerald-300">Cách 1 — Brevo Free (Khuyên dùng nhất):</strong> Đăng ký tại <a href="https://app.brevo.com/settings/keys/api" target="_blank" rel="noreferrer" className="underline text-emerald-400">brevo.com</a>, dán API Key (<code>xkeysib-...</code>) vào ô trên. Không cần domain, gửi được tới MỌI email học viên tức thì!</p>
-                      <p>• <strong className="text-blue-300">Cách 2 — Resend Free:</strong> Dán API Key (<code>re_...</code>) từ <a href="https://resend.com/api-keys" target="_blank" rel="noreferrer" className="underline text-blue-400">resend.com</a>. Nếu chưa verify Domain thì chỉ gửi về email admin ({adminEmailSetting}).</p>
-                      <p>• <strong className="text-amber-300">Cách 3 — Gmail SMTP:</strong> Điền Mật khẩu ứng dụng 16 ký tự lấy từ Google Account. Gửi qua SMTP Port 587.</p>
+                      <p className="font-bold text-slate-200">💡 Hướng dẫn gửi mail qua Gmail SMTP 100%:</p>
+                      <p>• 1. Nhập <strong>Admin Email Address</strong> (ví dụ: <code>duongrbt@gmail.com</code>).</p>
+                      <p>• 2. Vào <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer" className="underline text-amber-400">myaccount.google.com/apppasswords</a> lấy chuỗi 16 ký tự Mật khẩu ứng dụng và dán vào ô trên.</p>
+                      <p>• 3. Bấm <strong>Save Notification Settings</strong> và thử gửi mail cho học viên!</p>
                     </div>
 
                     <button
@@ -2566,7 +2548,7 @@ export default function AdminDashboard({
                       className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-2.5 rounded-xl cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg transition-all"
                     >
                       <Send className="w-3.5 h-3.5" />
-                      <span>{testingEmail ? 'Sending...' : 'Test Resend Notification'}</span>
+                      <span>{testingEmail ? 'Sending...' : 'Test Gmail SMTP Notification'}</span>
                     </button>
                   </div>
 

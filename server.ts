@@ -1205,154 +1205,50 @@ async function sendTelegramAlert(message: string): Promise<boolean> {
   }
 }
 
-// Helper: Universal Email Sender (Gmail SMTP Priority -> Brevo API -> Resend API)
+// Helper: Pure Gmail SMTP Email Sender (Nodemailer)
 async function sendCustomEmail(toEmail: string, subject: string, htmlContent: string): Promise<{ success: boolean; error?: string }> {
-  const apiKey = (notificationSettings.resendApiKey || notificationSettings.emailApiKey || process.env.RESEND_API_KEY || process.env.BREVO_API_KEY || "").trim();
   const senderEmail = (notificationSettings.adminEmail || process.env.ADMIN_EMAIL || "duongrbt@gmail.com").trim();
   const gmailPass = (notificationSettings.gmailAppPassword || process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASSWORD || "").replace(/\s+/g, "");
 
-  // 1. PRIORITY DISPATCHER: GMAIL SMTP (If Gmail App Password is provided)
-  if (gmailPass) {
-    try {
-      let ipv4Host = "smtp.gmail.com";
-      try {
-        const dnsPromises = require("dns").promises;
-        const ips = await dnsPromises.resolve4("smtp.gmail.com");
-        if (ips && ips.length > 0) ipv4Host = ips[0];
-      } catch (e) {}
-
-      const transporter = nodemailer.createTransport({
-        host: ipv4Host,
-        port: 587,
-        secure: false,
-        tls: { servername: "smtp.gmail.com", rejectUnauthorized: false },
-        auth: { user: senderEmail, pass: gmailPass },
-        connectionTimeout: 12000
-      });
-
-      await transporter.sendMail({
-        from: `"OutSystems Pro Academy" <${senderEmail}>`,
-        to: toEmail,
-        subject: subject,
-        html: htmlContent
-      });
-
-      return { success: true };
-    } catch (smtpErr: any) {
-      console.warn("Gmail SMTP dispatch note:", smtpErr.message);
-      if (!apiKey) {
-        return {
-          success: false,
-          error: `Gửi mail qua Gmail SMTP thất bại: ${smtpErr.message || 'Vui lòng kiểm tra lại Gmail App Password trong tab Alerts & API.'}`
-        };
-      }
-    }
+  if (!gmailPass) {
+    return {
+      success: false,
+      error: "Chưa cấu hình Mật khẩu ứng dụng Gmail (16 ký tự). Vui lòng vào tab Alerts & API nhập Gmail App Password!"
+    };
   }
 
-  // 2. BREVO API (xkeysib-...) DISPATCHER - PORT 443 HTTPS
-  if (apiKey.startsWith("xkeysib-")) {
+  try {
+    let ipv4Host = "smtp.gmail.com";
     try {
-      const res = await fetch("https://api.brevo.com/v3/smtp/email", {
-        method: "POST",
-        headers: {
-          "api-key": apiKey,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          sender: { name: "OutSystems Pro Academy", email: senderEmail },
-          to: [{ email: toEmail }],
-          subject: subject,
-          htmlContent: htmlContent
-        })
-      });
+      const dnsPromises = require("dns").promises;
+      const ips = await dnsPromises.resolve4("smtp.gmail.com");
+      if (ips && ips.length > 0) ipv4Host = ips[0];
+    } catch (e) {}
 
-      const data = await res.json();
-      if (res.ok) return { success: true };
+    const transporter = nodemailer.createTransport({
+      host: ipv4Host,
+      port: 587,
+      secure: false,
+      tls: { servername: "smtp.gmail.com", rejectUnauthorized: false },
+      auth: { user: senderEmail, pass: gmailPass },
+      connectionTimeout: 15000
+    });
 
-      const brevoErr = data.message || JSON.stringify(data);
-      return { success: false, error: `Lỗi Brevo API: ${brevoErr}` };
-    } catch (e: any) {
-      return { success: false, error: `Không thể kết nối Brevo API: ${e.message}` };
-    }
+    await transporter.sendMail({
+      from: `"OutSystems Pro Academy" <${senderEmail}>`,
+      to: toEmail,
+      subject: subject,
+      html: htmlContent
+    });
+
+    return { success: true };
+  } catch (smtpErr: any) {
+    console.error("Gmail SMTP error:", smtpErr.message);
+    return {
+      success: false,
+      error: `Gửi mail qua Gmail SMTP thất bại: ${smtpErr.message || 'Vui lòng kiểm tra lại Gmail App Password trong tab Alerts & API.'}`
+    };
   }
-
-  // 3. RESEND API (re_...) DISPATCHER - PORT 443 HTTPS
-  if (apiKey) {
-    try {
-      let fromAddress = "OutSystems Pro Academy <onboarding@resend.dev>";
-      if (senderEmail && !senderEmail.endsWith("@gmail.com") && !senderEmail.endsWith("@yahoo.com") && !senderEmail.endsWith("@hotmail.com")) {
-        fromAddress = `OutSystems Pro Academy <${senderEmail}>`;
-      } else if (senderEmail) {
-        const prefix = senderEmail.split("@")[0] || "support";
-        fromAddress = `OutSystems Pro Academy <${prefix}@outsystems-pro-academy.com>`;
-      }
-
-      let res = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          from: fromAddress,
-          to: [toEmail],
-          subject: subject,
-          html: htmlContent
-        })
-      });
-
-      let data = await res.json();
-
-      // If custom domain is not yet verified on Resend, fallback to onboarding@resend.dev
-      if (!res.ok && fromAddress !== "OutSystems Pro Academy <onboarding@resend.dev>") {
-        res = await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${apiKey}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            from: "OutSystems Pro Academy <onboarding@resend.dev>",
-            to: [toEmail],
-            subject: subject,
-            html: htmlContent
-          })
-        });
-        data = await res.json();
-      }
-
-      if (res.ok && data.id) {
-        return { success: true };
-      }
-
-      const resendErr = data.message || data.error || JSON.stringify(data);
-      console.error("Resend API note:", resendErr);
-
-      // Special handling for Resend testing domain restriction
-      if (typeof resendErr === 'string' && resendErr.includes("testing emails to your own email address")) {
-        return {
-          success: false,
-          error: `⚠️ Tài khoản Resend Free chưa verify Domain nên chỉ cho gửi mail về email admin (${senderEmail}). Vui lòng nhập Gmail App Password trong tab Alerts & API để chuyển sang gửi trực tiếp qua Gmail SMTP!`
-        };
-      }
-
-      return {
-        success: false,
-        error: `Lỗi Resend API: ${typeof resendErr === 'object' ? JSON.stringify(resendErr) : resendErr}`
-      };
-    } catch (e: any) {
-      console.error("Resend fetch error:", e.message);
-      return {
-        success: false,
-        error: `Không thể kết nối tới Resend API: ${e.message}`
-      };
-    }
-  }
-
-  return {
-    success: false,
-    error: "Chưa cấu hình tài khoản gửi mail. Vui lòng dán Gmail App Password (Mật khẩu ứng dụng 16 ký tự) hoặc Brevo/Resend API Key trong tab Alerts & API!"
-  };
 }
 
 async function sendAdminEmailAlert(subject: string, textBody: string): Promise<boolean> {
