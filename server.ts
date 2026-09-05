@@ -697,12 +697,11 @@ async function repairSupabaseCoursesTable() {
   const supabase = getSupabase();
   if (!supabase) return;
   try {
-    for (const course of fallbackCourses) {
+    const batchPayload = fallbackCourses.map(course => {
       const targetUuid = resolveCourseUuid(course.id);
       const platformTag = course.tags?.find((t: any) => t.text === 'O11' || t.text === 'ODC')?.text || 'O11';
       const isNewTag = course.tags?.some((t: any) => t.text === 'NEW') || false;
-
-      const rowPayload = {
+      return {
         id: targetUuid,
         title: course.title,
         description: course.description,
@@ -711,9 +710,9 @@ async function repairSupabaseCoursesTable() {
         platform: platformTag,
         is_new: isNewTag
       };
+    });
 
-      await supabase.from('courses').upsert(rowPayload, { onConflict: 'id' });
-    }
+    await supabase.from('courses').upsert(batchPayload, { onConflict: 'id' });
   } catch (e: any) {
     console.error("Auto-repair courses table note:", e.message);
   }
@@ -849,46 +848,43 @@ app.post("/api/admin/courses/delete", requireAdminAuth, async (req, res) => {
 // Helper function to sync exam_sets to Supabase courses table across courseId & targetUuid
 async function syncCourseExamSetsToSupabase(supabase: any, courseId: string, targetUuid: string, examSets: any[]) {
   if (!supabase) return;
-  const fallbackObj = fallbackCourses.find(f => f.id === courseId || f.id === targetUuid) || fallbackCourses[0];
 
   // 1. Update ONLY the target course in-memory on the server FIRST
   const fIdx = fallbackCourses.findIndex(f => f.id === courseId || f.id === targetUuid);
+  const allSetQs = examSets.flatMap(s => s.questions || []);
   if (fIdx !== -1) {
     fallbackCourses[fIdx].examSets = examSets;
-    const allSetQs = examSets.flatMap(s => s.questions || []);
     if (allSetQs.length > 0) {
       fallbackCourses[fIdx].mockExam = allSetQs;
     }
   }
 
-  const jsonStr = JSON.stringify(examSets);
-  const allQuestions = examSets.flatMap(s => s.questions || []);
-  const jsonQsStr = JSON.stringify(allQuestions);
+  // 2. Perform ONE single batch update call to Supabase
+  const updatePayload = {
+    exam_sets: examSets,
+    mock_exam: allSetQs
+  };
 
-  // 2. Try array & JSON string payloads across strict IDs ONLY
-  const payloads = [
-    { exam_sets: examSets },
-    { exam_sets: jsonStr },
-    { exam_sets: examSets, mock_exam: allQuestions },
-    { exam_sets: jsonStr, mock_exam: jsonQsStr }
-  ];
-
-  for (const p of payloads) {
-    try { await supabase.from('courses').update(p).eq('id', courseId); } catch (e) {}
-    try { await supabase.from('courses').update(p).eq('id', targetUuid); } catch (e) {}
-  }
-
-  // 3. Fallback upsert
   try {
-    await supabase.from('courses').upsert({
-      id: targetUuid,
-      title: fallbackObj ? fallbackObj.title : "OutSystems Certification Course",
-      price: fallbackObj ? (fallbackObj.price || 29.99) : 29.99,
-      image_url: fallbackObj ? (fallbackObj.imageUrl || '') : '',
-      description: fallbackObj ? (fallbackObj.description || '') : '',
-      exam_sets: examSets
-    });
-  } catch (e) {}
+    const { error } = await supabase.from('courses').update(updatePayload).eq('id', courseId);
+    if (error && targetUuid && targetUuid !== courseId) {
+      await supabase.from('courses').update(updatePayload).eq('id', targetUuid);
+    }
+  } catch (e) {
+    // Fallback single upsert if course row doesn't exist yet
+    try {
+      const fallbackObj = fallbackCourses.find(f => f.id === courseId || f.id === targetUuid) || fallbackCourses[0];
+      await supabase.from('courses').upsert({
+        id: targetUuid,
+        title: fallbackObj ? fallbackObj.title : "OutSystems Certification Course",
+        price: fallbackObj ? (fallbackObj.price || 29.99) : 29.99,
+        image_url: fallbackObj ? (fallbackObj.imageUrl || '') : '',
+        description: fallbackObj ? (fallbackObj.description || '') : '',
+        exam_sets: examSets,
+        mock_exam: allSetQs
+      });
+    } catch (err) {}
+  }
 }
 
 // SAVE QUESTIONS ENDPOINT FULLY CONNECTED TO SUPABASE 3NF SCHEMA ('exam_questions' & 'question_options')
