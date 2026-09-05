@@ -1830,36 +1830,29 @@ const handleAiExplainRequest = async (req: express.Request, res: express.Respons
 
         const incorrectOptionsList = targetChoices
           .filter((c: any) => c.key !== targetCorrectKey)
-          .map((c: any) => `- **Option ${c.key} ("${c.text}"):** Explain why this option is incorrect or sub-optimal in this specific scenario.`)
+          .map((c: any) => `- **Option ${c.key} ("${c.text}"):** Explain concisely why this option is eliminated / incorrect.`)
           .join('\n');
 
-        const aiPrompt = `You are a Principal OutSystems Certified Enterprise Architect & Senior Certification Instructor.
-Explain this OutSystems exam question in deep, technical detail in ENGLISH.
+        const aiPrompt = `You are an OutSystems Certified Enterprise Architect.
+Explain this OutSystems exam question concisely in ENGLISH.
 
-Course Context: ${courseTitle || 'OutSystems Certification'}
-Question Scenario: ${targetQuestion}
-Options Provided:
+Question: ${targetQuestion}
+Options:
 ${optionsBreakdown}
 
-Correct Answer Key: ${targetCorrectKey} (${correctText})
-Candidate's Selected Answer: ${targetUserKey}
-Official Brief Note: ${baseExplanation}
+Correct Answer: Option ${targetCorrectKey} (${correctText})
 
-Formatting & Content Requirements (Respond in ENGLISH):
-Respond as a top 1% OutSystems Principal Architect. Structure your response clearly into 4 sections:
+Strict Output Rules:
+1. Do NOT repeat the question context, scenario intro, or background.
+2. Keep explanation short, concise, and focused on facts.
+3. Use the Elimination Method (Phương pháp Loại Trừ) for wrong choices.
+4. Structure into EXACTLY TWO sections:
 
-🎯 **Correct Answer: Option ${targetCorrectKey} — "${correctText}"**
-Explain in technical detail why Option ${targetCorrectKey} is correct specifically within the scenario and requirements described in the question prompt.
+✅ **Why Option ${targetCorrectKey} is Correct:**
+(Explain directly in 1-2 concise sentences why Option ${targetCorrectKey} is correct)
 
-💡 **OutSystems Architect Deep Dive:**
-Provide deep technical context based on OutSystems Architecture Canvas (O11 / ODC), runtime execution, database transaction isolation, server vs service actions, or performance best practices.
-
-❌ **Detailed Analysis of Incorrect Options:**
-Break down each incorrect option individually and explain why it fails or is inappropriate in this specific scenario:
-${incorrectOptionsList}
-
-🚀 **OutSystems Exam Pro Tip:**
-Provide a key architectural term or rule to remember for scenario-based exam questions on this topic.`;
+❌ **Elimination & Why Other Options are Incorrect:**
+${incorrectOptionsList}`;
 
         const result = await model.generateContent(aiPrompt);
         const text = result.response.text();
@@ -1871,31 +1864,24 @@ Provide a key architectural term or rule to remember for scenario-based exam que
       }
     }
 
-    // Expert Persona Output (OutSystems Principal Architect Fallback in English)
+    // Concise Fallback Response with Elimination Method
     const incorrectChoicesList = targetChoices
       .filter((c: any) => c.key !== targetCorrectKey)
-      .map((c: any) => `• **Option ${c.key} ("${c.text}"):** Incorrect for this scenario because it fails to satisfy the core requirements or introduces unnecessary runtime overhead.`)
+      .map((c: any) => `• **Option ${c.key} ("${c.text}"):** Eliminated. Violates OutSystems Architecture rules or introduces unnecessary runtime overhead.`)
       .join('\n');
 
-    const expertOutput = `🎓 **OutSystems Principal Architect Exam Analysis**
+    const expertOutput = `✅ **Why Option ${targetCorrectKey} is Correct:**
+• **Technical Reason:** ${baseExplanation || `Option ${targetCorrectKey} ("${correctText}") complies directly with OutSystems official architecture patterns, ensuring proper module separation and optimal runtime execution.`}
 
-🎯 **Correct Answer:** **Option ${targetCorrectKey}** — *"${correctText}"*
-
-💡 **Why Option ${targetCorrectKey} is Correct in this Scenario:**
-${baseExplanation ? `• **Official OutSystems Context:** ${baseExplanation}\n` : ''}• **Technical Rationale:** In the context of this scenario, Option ${targetCorrectKey} ("${correctText}") complies directly with OutSystems official patterns. It ensures proper architectural separation (3-Layer Canvas: Orchestration, End-User, Core, Foundation), maintains data isolation, and prevents performance bottlenecks during runtime execution.
-
-❌ **Why the Other Options are Incorrect in this Scenario:**
-${incorrectChoicesList || `• **Other Options:** The remaining choices introduce architectural anti-patterns such as tight coupling between modules, improper lifecycle hook usage, or unhandled database transaction side-effects.`}
-
-🚀 **OutSystems Exam Pro Tip:**
-Always identify key scenario triggers (e.g., *Service Actions vs. Server Actions*, *Reactive Data Fetching*, *Asynchronous Events*, *Role Isolation*). OutSystems exam questions favor solutions that prioritize scalability, maintainability, and clean architecture separation.`;
+❌ **Elimination & Why Other Options are Incorrect:**
+${incorrectChoicesList || `• **Other Options:** Eliminated because they introduce architectural anti-patterns such as improper module coupling or invalid lifecycle execution.`}`;
 
     return res.json({ success: true, explanation: expertOutput });
   } catch (err: any) {
     console.error("AI Explain endpoint error:", err);
     return res.json({
       success: true,
-      explanation: "🎓 **OutSystems Expert Insight:** The correct answer complies with OutSystems official Architecture Canvas and certification patterns."
+      explanation: "✅ **Why Correct:** Option complies with OutSystems official Architecture Canvas.\n\n❌ **Elimination:** Other choices introduce improper module coupling or invalid runtime execution."
     });
   }
 };
