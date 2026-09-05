@@ -86,6 +86,7 @@ let memoryUsers: any[] = [
 ];
 let memoryActivationCodes: any[] = [];
 let memoryPaymentRequests: any[] = [];
+const activeAdminOtps: Record<string, { email: string; code: string; expiresAt: number }> = {};
 
 // Notification Settings State (Defaults populated from Render ENV / Supabase system_settings)
 const notificationSettings = {
