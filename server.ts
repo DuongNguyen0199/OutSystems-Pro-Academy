@@ -851,27 +851,46 @@ app.post("/api/admin/codes/delete", requireAdminAuth, async (req, res) => {
   }
 });
 
-// Repair function to restore 11 distinct course titles & images in Supabase if overwritten
+// Repair function to safely restore missing course metadata in Supabase WITHOUT overwriting exam_sets or mock_exam
 async function repairSupabaseCoursesTable() {
   const supabase = getSupabase();
   if (!supabase) return;
   try {
-    const batchPayload = fallbackCourses.map(course => {
+    const { data: existingCourses } = await supabase.from('courses').select('id, exam_sets, mock_exam');
+    const existingMap = new Map((existingCourses || []).map((c: any) => [c.id, c]));
+
+    for (const course of fallbackCourses) {
       const targetUuid = resolveCourseUuid(course.id);
       const platformTag = course.tags?.find((t: any) => t.text === 'O11' || t.text === 'ODC')?.text || 'O11';
       const isNewTag = course.tags?.some((t: any) => t.text === 'NEW') || false;
-      return {
-        id: targetUuid,
-        title: course.title,
-        description: course.description,
-        price: course.price,
-        image_url: course.imageUrl,
-        platform: platformTag,
-        is_new: isNewTag
-      };
-    });
 
-    await supabase.from('courses').upsert(batchPayload, { onConflict: 'id' });
+      const existingRow = existingMap.get(targetUuid) || existingMap.get(course.id);
+
+      if (existingRow) {
+        // Safe update: update ONLY course metadata fields, preserve existing exam_sets and mock_exam!
+        await supabase.from('courses').update({
+          title: course.title,
+          description: course.description,
+          price: course.price,
+          image_url: course.imageUrl,
+          platform: platformTag,
+          is_new: isNewTag
+        }).eq('id', targetUuid);
+      } else {
+        // Insert new course row only if missing from DB
+        await supabase.from('courses').insert({
+          id: targetUuid,
+          title: course.title,
+          description: course.description,
+          price: course.price,
+          image_url: course.imageUrl,
+          platform: platformTag,
+          is_new: isNewTag,
+          exam_sets: course.examSets || [],
+          mock_exam: course.mockExam || []
+        });
+      }
+    }
   } catch (e: any) {
     console.error("Auto-repair courses table note:", e.message);
   }
@@ -935,26 +954,17 @@ app.post("/api/admin/courses/upsert", requireAdminAuth, async (req, res) => {
         extendedUpdate.image_url = imageUrl;
       }
 
-      // STRICT ID MATCHING ONLY - Never match by title substring!
-      try { await supabase.from('courses').update(coreUpdate).eq('id', id); } catch (e) {}
-      try { await supabase.from('courses').update(coreUpdate).eq('id', targetUuid); } catch (e) {}
-
-      try { await supabase.from('courses').update(extendedUpdate).eq('id', id); } catch (e) {}
-      try { await supabase.from('courses').update(extendedUpdate).eq('id', targetUuid); } catch (e) {}
-
-      // Fallback upsert with targetUuid
+      // Safe update: update course metadata without overwriting exam_sets or mock_exam
       try {
-        await supabase.from('courses').upsert({
-          id: targetUuid,
-          ...extendedUpdate
-        });
-      } catch (e) {
-        try {
-          await supabase.from('courses').upsert({
+        const { data: updated } = await supabase.from('courses').update(extendedUpdate).eq('id', targetUuid).select();
+        if (!updated || updated.length === 0) {
+          await supabase.from('courses').insert({
             id: targetUuid,
-            ...coreUpdate
+            ...extendedUpdate
           });
-        } catch (e2) {}
+        }
+      } catch (e) {
+        try { await supabase.from('courses').update(coreUpdate).eq('id', targetUuid); } catch (e2) {}
       }
     }
 
