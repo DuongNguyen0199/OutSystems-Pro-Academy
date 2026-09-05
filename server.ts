@@ -340,6 +340,8 @@ app.post("/api/auth/login", async (req, res) => {
           if (envAdminPassword && cleanPassword !== envAdminPassword) {
             return res.status(401).json({ success: false, error: "Incorrect password for Admin account." });
           }
+        } else if (dbUser.password && dbUser.password !== cleanPassword) {
+          return res.status(401).json({ success: false, error: "Incorrect password for this account." });
         }
 
         return res.json({
@@ -464,6 +466,7 @@ app.post("/api/admin/users/create", requireAdminAuth, async (req, res) => {
       const { error: userErr } = await supabase.from("users").upsert({
         id: newUser.id,
         email: newUser.email,
+        password: newUser.password,
         role: newUser.role,
         status: newUser.status
       });
