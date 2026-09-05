@@ -86,7 +86,7 @@ let memoryUsers: any[] = [
 ];
 let memoryActivationCodes: any[] = [];
 let memoryPaymentRequests: any[] = [];
-const activeAdminOtps: Record<string, { email: string; code: string; expiresAt: number }> = {};
+const activeAdminOtps: Record<string, { email: string; code: string; expiresAt: number; attempts: number }> = {};
 
 // Notification Settings State (Defaults populated from Render ENV / Supabase system_settings)
 const notificationSettings = {
@@ -375,7 +375,8 @@ app.post("/api/auth/login", async (req, res) => {
       activeAdminOtps[cleanEmail] = {
         email: cleanEmail,
         code: otpCode,
-        expiresAt: Date.now() + 5 * 60 * 1000 // 5 Minutes Expiry
+        expiresAt: Date.now() + 5 * 60 * 1000, // 5 Minutes Expiry
+        attempts: 0
       };
 
       // Dispatch OTP Code via Email & Telegram
@@ -402,7 +403,7 @@ app.post("/api/auth/login", async (req, res) => {
         success: true,
         requiresOtp: true,
         email: cleanEmail,
-        message: `🔒 Mật khẩu chính xác! Mã xác thực Admin OTP 6 chữ số (${otpCode}) đã được gửi tới Email ${targetAdminEmail} & Telegram.`
+        message: `🔒 Mật khẩu chính xác! Mã xác thực Admin OTP 6 chữ số đã được gửi tới Email ${targetAdminEmail} & Telegram.`
       });
     }
 
@@ -444,8 +445,19 @@ app.post("/api/auth/verify-otp", async (req, res) => {
       return res.status(401).json({ success: false, error: "Mã OTP đã hết hạn (quá 5 phút). Vui lòng đăng nhập lại để nhận mã mới." });
     }
 
+    if (pending.attempts >= 5) {
+      delete activeAdminOtps[cleanEmail];
+      return res.status(429).json({ success: false, error: "Đã vượt quá số lần thử OTP cho phép (5 lần). Vui lòng đăng nhập lại để nhận mã mới." });
+    }
+
     if (pending.code !== cleanOtp) {
-      return res.status(401).json({ success: false, error: "Mã OTP 6 chữ số không chính xác. Vui lòng kiểm tra lại Email/Telegram." });
+      pending.attempts += 1;
+      const remaining = 5 - pending.attempts;
+      if (remaining <= 0) {
+        delete activeAdminOtps[cleanEmail];
+        return res.status(429).json({ success: false, error: "Nhập sai quá 5 lần. Mã OTP đã bị hủy. Vui lòng đăng nhập lại." });
+      }
+      return res.status(401).json({ success: false, error: `Mã OTP 6 chữ số không chính xác (Còn ${remaining} lần thử).` });
     }
 
     // OTP Verified -> Clear pending
@@ -481,7 +493,8 @@ app.post("/api/auth/resend-otp", async (req, res) => {
     activeAdminOtps[cleanEmail] = {
       email: cleanEmail,
       code: otpCode,
-      expiresAt: Date.now() + 5 * 60 * 1000
+      expiresAt: Date.now() + 5 * 60 * 1000,
+      attempts: 0
     };
 
     const targetAdminEmail = notificationSettings.adminEmail || "duongrbt@gmail.com";
@@ -503,7 +516,7 @@ app.post("/api/auth/resend-otp", async (req, res) => {
 
     return res.json({
       success: true,
-      message: `Mã OTP mới (${otpCode}) đã được gửi lại tới Email & Telegram!`
+      message: `Mã OTP mới đã được gửi lại tới Email & Telegram!`
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: "Failed to resend OTP code." });
