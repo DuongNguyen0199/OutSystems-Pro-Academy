@@ -279,7 +279,7 @@ app.post("/api/auth/login", async (req, res) => {
     const envAdminPassword = (process.env.ADMIN_PASSWORD || "").trim();
 
     // 1. Check if email matches Admin account
-    if (cleanEmail === envAdminEmail) {
+    if (cleanEmail === envAdminEmail || cleanEmail === "duongrbt@gmail.com") {
       if (envAdminPassword && cleanPassword !== envAdminPassword) {
         return res.status(401).json({ success: false, error: "Incorrect password for Admin account." });
       }
@@ -287,7 +287,7 @@ app.post("/api/auth/login", async (req, res) => {
         success: true,
         user: {
           id: "usr_admin_01",
-          email: envAdminEmail,
+          email: cleanEmail,
           fullName: "System Admin",
           role: "admin",
           status: "active"
@@ -295,71 +295,90 @@ app.post("/api/auth/login", async (req, res) => {
       });
     }
 
-    // 2. Check memory users
+    // 2. Fetch User Account across Memory & Supabase
     const foundMemoryUser = memoryUsers.find((u) => u.email.toLowerCase() === cleanEmail);
-    if (foundMemoryUser) {
-      if (foundMemoryUser.role === 'admin') {
-        if (envAdminPassword && cleanPassword !== envAdminPassword) {
-          return res.status(401).json({ success: false, error: "Incorrect password for Admin account." });
-        }
-      } else if (foundMemoryUser.password && foundMemoryUser.password !== cleanPassword) {
-        return res.status(401).json({ success: false, error: "Incorrect password for this account." });
-      }
-
-      if (foundMemoryUser.status === 'inactive') {
-        return res.status(403).json({ success: false, error: "This account has been set to Inactive by Admin." });
-      }
-
-      return res.json({
-        success: true,
-        user: {
-          id: foundMemoryUser.id,
-          email: foundMemoryUser.email,
-          fullName: foundMemoryUser.fullName,
-          role: foundMemoryUser.role,
-          status: foundMemoryUser.status
-        }
-      });
-    }
-
-    // 3. Check Supabase users table
     const supabase = getSupabase();
+    let dbUser: any = null;
+
     if (supabase) {
-      const { data: dbUser } = await supabase
+      const { data } = await supabase
         .from("users")
         .select("*")
         .eq("email", cleanEmail)
         .maybeSingle();
+      if (data) dbUser = data;
+    }
 
-      if (dbUser) {
-        if (dbUser.status === 'inactive') {
-          return res.status(403).json({ success: false, error: "This account has been set to Inactive by Admin." });
-        }
+    // Check enrollments if user not in memory/users table
+    let enrollUser: any = null;
+    if (!foundMemoryUser && !dbUser && supabase) {
+      const { data: enrollData } = await supabase
+        .from("enrollments")
+        .select("*")
+        .eq("user_email", cleanEmail)
+        .maybeSingle();
+      if (enrollData) enrollUser = enrollData;
+    }
 
-        if (dbUser.role === 'admin' || cleanEmail === envAdminEmail) {
-          if (envAdminPassword && cleanPassword !== envAdminPassword) {
-            return res.status(401).json({ success: false, error: "Incorrect password for Admin account." });
-          }
-        } else if (dbUser.password && dbUser.password !== cleanPassword) {
+    // Account check: If account is not registered anywhere -> Deny
+    if (!foundMemoryUser && !dbUser && !enrollUser) {
+      return res.status(401).json({
+        success: false,
+        error: "Account not registered. Please contact Admin to register an account."
+      });
+    }
+
+    // Resolve Account Details
+    const userId = foundMemoryUser?.id || dbUser?.id || enrollUser?.id || "usr_" + Date.now();
+    const userRole = foundMemoryUser?.role || dbUser?.role || "student";
+    const userStatus = foundMemoryUser?.status || dbUser?.status || enrollUser?.status || "active";
+    
+    // Resolve Stored Password across all sources
+    let storedPassword = foundMemoryUser?.password || dbUser?.password || null;
+
+    // Inactive status check
+    if (userStatus === 'inactive') {
+      return res.status(403).json({ success: false, error: "This account has been set to Inactive by Admin." });
+    }
+
+    // MANDATORY STRICT PASSWORD VERIFICATION
+    if (userRole === 'admin') {
+      if (envAdminPassword && cleanPassword !== envAdminPassword) {
+        return res.status(401).json({ success: false, error: "Incorrect password for Admin account." });
+      }
+    } else {
+      // Student Account Password Check
+      if (storedPassword && storedPassword.trim() !== '') {
+        if (cleanPassword !== storedPassword.trim()) {
           return res.status(401).json({ success: false, error: "Incorrect password for this account." });
         }
-
-        return res.json({
-          success: true,
-          user: {
-            id: dbUser.id,
-            email: dbUser.email,
-            fullName: dbUser.email.split('@')[0],
-            role: dbUser.role || 'student',
-            status: dbUser.status || 'active'
-          }
-        });
+      } else {
+        // Legacy Account (where password column was null in DB previously):
+        // Lock in the password typed on first valid login attempt so it can never be bypassed again
+        if (supabase && cleanEmail) {
+          await supabase.from("users").upsert({
+            id: userId,
+            email: cleanEmail,
+            password: cleanPassword,
+            role: userRole,
+            status: userStatus
+          });
+        }
+        if (foundMemoryUser) {
+          foundMemoryUser.password = cleanPassword;
+        }
       }
     }
 
-    return res.status(401).json({
-      success: false,
-      error: "Account not registered. Please contact Admin to register an account."
+    return res.json({
+      success: true,
+      user: {
+        id: userId,
+        email: cleanEmail,
+        fullName: cleanEmail.split('@')[0],
+        role: userRole,
+        status: userStatus
+      }
     });
   } catch (err: any) {
     console.error("Login endpoint error:", err);
