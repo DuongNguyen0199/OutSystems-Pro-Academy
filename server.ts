@@ -1830,7 +1830,7 @@ const handleAiExplainRequest = async (req: express.Request, res: express.Respons
 
         const incorrectOptionsList = targetChoices
           .filter((c: any) => c.key !== targetCorrectKey)
-          .map((c: any) => `- **Option ${c.key} ("${c.text}"):** Explain concisely why this option is eliminated / incorrect.`)
+          .map((c: any) => `- Option ${c.key} ("${c.text}"): Explain concisely why this option is eliminated / incorrect.`)
           .join('\n');
 
         const aiPrompt = `You are an OutSystems Certified Enterprise Architect.
@@ -1845,18 +1845,20 @@ Correct Answer: Option ${targetCorrectKey} (${correctText})
 Strict Output Rules:
 1. Do NOT repeat the question context, scenario intro, or background.
 2. Keep explanation short, concise, and focused on facts.
-3. Use the Elimination Method (Phương pháp Loại Trừ) for wrong choices.
-4. Structure into EXACTLY TWO sections:
+3. CRITICAL: Do NOT use any asterisks (*) or markdown formatting anywhere in your output. Clean text only.
+4. Use the Elimination Method (Phương pháp Loại Trừ) for wrong choices.
+5. Structure into EXACTLY TWO sections:
 
-✅ **Why Option ${targetCorrectKey} is Correct:**
+✅ Why Option ${targetCorrectKey} is Correct:
 (Explain directly in 1-2 concise sentences why Option ${targetCorrectKey} is correct)
 
-❌ **Elimination & Why Other Options are Incorrect:**
+❌ Elimination & Why Other Options are Incorrect:
 ${incorrectOptionsList}`;
 
         const result = await model.generateContent(aiPrompt);
-        const text = result.response.text();
+        let text = result.response.text();
         if (text) {
+          text = text.replace(/\*/g, '');
           return res.json({ success: true, explanation: text });
         }
       } catch (geminiErr: any) {
@@ -1864,19 +1866,19 @@ ${incorrectOptionsList}`;
       }
     }
 
-    // Concise Fallback Response with Elimination Method
+    // Concise Fallback Response with Elimination Method (No Asterisks)
     const incorrectChoicesList = targetChoices
       .filter((c: any) => c.key !== targetCorrectKey)
-      .map((c: any) => `• **Option ${c.key} ("${c.text}"):** Eliminated. Violates OutSystems Architecture rules or introduces unnecessary runtime overhead.`)
+      .map((c: any) => `• Option ${c.key} ("${c.text}"): Eliminated. Violates OutSystems Architecture rules or introduces unnecessary runtime overhead.`)
       .join('\n');
 
-    const expertOutput = `✅ **Why Option ${targetCorrectKey} is Correct:**
-• **Technical Reason:** ${baseExplanation || `Option ${targetCorrectKey} ("${correctText}") complies directly with OutSystems official architecture patterns, ensuring proper module separation and optimal runtime execution.`}
+    const expertOutput = `✅ Why Option ${targetCorrectKey} is Correct:
+• Technical Reason: ${baseExplanation || `Option ${targetCorrectKey} ("${correctText}") complies directly with OutSystems official architecture patterns, ensuring proper module separation and optimal runtime execution.`}
 
-❌ **Elimination & Why Other Options are Incorrect:**
-${incorrectChoicesList || `• **Other Options:** Eliminated because they introduce architectural anti-patterns such as improper module coupling or invalid lifecycle execution.`}`;
+❌ Elimination & Why Other Options are Incorrect:
+${incorrectChoicesList || `• Other Options: Eliminated because they introduce architectural anti-patterns such as improper module coupling or invalid lifecycle execution.`}`;
 
-    return res.json({ success: true, explanation: expertOutput });
+    return res.json({ success: true, explanation: expertOutput.replace(/\*/g, '') });
   } catch (err: any) {
     console.error("AI Explain endpoint error:", err);
     return res.json({

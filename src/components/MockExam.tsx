@@ -378,7 +378,7 @@ export default function MockExam({
                       <span>Custom AI Tutor Response</span>
                     </div>
                     <p className="whitespace-pre-line leading-relaxed text-slate-800 font-sans">
-                      {aiExplanations[currentQuestion.id]}
+                      {aiExplanations[currentQuestion.id]?.replace(/\*/g, '')}
                     </p>
                   </motion.div>
                 )}
