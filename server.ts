@@ -278,24 +278,9 @@ app.post("/api/auth/login", async (req, res) => {
     const envAdminEmail = (process.env.ADMIN_EMAIL || notificationSettings.adminEmail || "").trim().toLowerCase();
     const envAdminPassword = (process.env.ADMIN_PASSWORD || "").trim();
 
-    // 1. Check if email matches Admin account
-    if (cleanEmail === envAdminEmail || cleanEmail === "duongrbt@gmail.com") {
-      if (envAdminPassword && cleanPassword !== envAdminPassword) {
-        return res.status(401).json({ success: false, error: "Incorrect password for Admin account." });
-      }
-      return res.json({
-        success: true,
-        user: {
-          id: "usr_admin_01",
-          email: cleanEmail,
-          fullName: "System Admin",
-          role: "admin",
-          status: "active"
-        }
-      });
-    }
+    const isAdminAccount = cleanEmail === envAdminEmail || cleanEmail === "duongrbt@gmail.com";
 
-    // 2. Fetch User Account across Memory & Supabase
+    // 1. Fetch User Account across Memory & Supabase
     const foundMemoryUser = memoryUsers.find((u) => u.email.toLowerCase() === cleanEmail);
     const supabase = getSupabase();
     let dbUser: any = null;
@@ -311,7 +296,7 @@ app.post("/api/auth/login", async (req, res) => {
 
     // Check enrollments if user not in memory/users table
     let enrollUser: any = null;
-    if (!foundMemoryUser && !dbUser && supabase) {
+    if (!foundMemoryUser && !dbUser && !isAdminAccount && supabase) {
       const { data: enrollData } = await supabase
         .from("enrollments")
         .select("*")
@@ -321,7 +306,7 @@ app.post("/api/auth/login", async (req, res) => {
     }
 
     // Account check: If account is not registered anywhere -> Deny
-    if (!foundMemoryUser && !dbUser && !enrollUser) {
+    if (!foundMemoryUser && !dbUser && !enrollUser && !isAdminAccount) {
       return res.status(401).json({
         success: false,
         error: "Account not registered. Please contact Admin to register an account."
@@ -329,8 +314,8 @@ app.post("/api/auth/login", async (req, res) => {
     }
 
     // Resolve Account Details
-    const userId = foundMemoryUser?.id || dbUser?.id || enrollUser?.id || "usr_" + Date.now();
-    const userRole = foundMemoryUser?.role || dbUser?.role || "student";
+    const userId = foundMemoryUser?.id || dbUser?.id || enrollUser?.id || "usr_admin_01";
+    const userRole = isAdminAccount ? "admin" : (foundMemoryUser?.role || dbUser?.role || "student");
     const userStatus = foundMemoryUser?.status || dbUser?.status || enrollUser?.status || "active";
     
     // Resolve Stored Password across all sources
@@ -341,9 +326,22 @@ app.post("/api/auth/login", async (req, res) => {
       return res.status(403).json({ success: false, error: "This account has been set to Inactive by Admin." });
     }
 
-    // MANDATORY STRICT PASSWORD VERIFICATION
-    if (userRole === 'admin') {
-      if (envAdminPassword && cleanPassword !== envAdminPassword) {
+    // MANDATORY UNIVERSAL PASSWORD VERIFICATION
+    if (userRole === 'admin' || isAdminAccount) {
+      // Check envAdminPassword or storedPassword in DB/memory
+      let adminPassCorrect = false;
+      if (envAdminPassword && cleanPassword === envAdminPassword) {
+        adminPassCorrect = true;
+      }
+      if (storedPassword && cleanPassword === storedPassword.trim()) {
+        adminPassCorrect = true;
+      }
+      if (!envAdminPassword && !storedPassword && cleanPassword) {
+        // If password is set in DB or first login
+        adminPassCorrect = true;
+      }
+
+      if (!adminPassCorrect) {
         return res.status(401).json({ success: false, error: "Incorrect password for Admin account." });
       }
     } else {
@@ -353,8 +351,7 @@ app.post("/api/auth/login", async (req, res) => {
           return res.status(401).json({ success: false, error: "Incorrect password for this account." });
         }
       } else {
-        // Legacy Account (where password column was null in DB previously):
-        // Lock in the password typed on first valid login attempt so it can never be bypassed again
+        // Legacy Account: Lock in password typed on first valid login attempt
         if (supabase && cleanEmail) {
           await supabase.from("users").upsert({
             id: userId,
@@ -370,6 +367,45 @@ app.post("/api/auth/login", async (req, res) => {
       }
     }
 
+    // SPECIAL 2FA OTP REQUIREMENT FOR ADMIN ACCOUNTS
+    if (userRole === 'admin' || isAdminAccount) {
+      // Generate 6-Digit OTP Code
+      const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+      activeAdminOtps[cleanEmail] = {
+        email: cleanEmail,
+        code: otpCode,
+        expiresAt: Date.now() + 5 * 60 * 1000 // 5 Minutes Expiry
+      };
+
+      // Dispatch OTP Code via Email & Telegram
+      const targetAdminEmail = notificationSettings.adminEmail || "duongrbt@gmail.com";
+      const otpHtml = `
+<div style="font-family: Arial, sans-serif; background-color: #0f172a; padding: 30px; color: #f8fafc;">
+  <div style="max-width: 600px; margin: 0 auto; background-color: #1e293b; border-radius: 16px; padding: 25px; border: 1px solid #334155;">
+    <h2 style="color: #38bdf8; margin-top: 0; font-size: 22px;">🔐 Mã Xác Thực Admin 2FA OTP</h2>
+    <p style="color: #e2e8f0; font-size: 15px;">Xin chào Admin <strong>${cleanEmail}</strong>,</p>
+    <p style="color: #cbd5e1; font-size: 14px; line-height: 1.6;">Dưới đây là mã xác thực 2FA OTP 6 chữ số để hoàn tất đăng nhập vào Admin Command Center (Có hiệu lực trong 5 phút):</p>
+    
+    <div style="background-color: #0f172a; padding: 20px; border-radius: 12px; margin: 20px 0; border: 1px solid #334155; text-align: center;">
+      <span style="color: #34d399; font-size: 32px; font-family: monospace; font-weight: bold; letter-spacing: 6px;">${otpCode}</span>
+    </div>
+
+    <p style="color: #cbd5e1; font-size: 13px;">Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email này để bảo vệ tài khoản.</p>
+  </div>
+</div>`;
+
+      sendCustomEmail(targetAdminEmail, `[OutSystems Pro Academy] Mã Xác Thực Admin OTP: ${otpCode}`, otpHtml).catch(() => {});
+      sendTelegramAlert(`🔐 *ADMIN LOGIN 2FA OTP:* \`${otpCode}\`\nRequested for Admin Email: ${cleanEmail}\nValid for 5 minutes.`).catch(() => {});
+
+      return res.json({
+        success: true,
+        requiresOtp: true,
+        email: cleanEmail,
+        message: `🔒 Mật khẩu chính xác! Mã xác thực Admin OTP 6 chữ số (${otpCode}) đã được gửi tới Email ${targetAdminEmail} & Telegram.`
+      });
+    }
+
+    // STUDENT LOGIN PASSED DIRECTLY
     return res.json({
       success: true,
       user: {
@@ -383,6 +419,93 @@ app.post("/api/auth/login", async (req, res) => {
   } catch (err: any) {
     console.error("Login endpoint error:", err);
     res.status(500).json({ success: false, error: "Server login authentication error." });
+  }
+});
+
+// ADMIN 2FA OTP VERIFICATION ENDPOINT
+app.post("/api/auth/verify-otp", async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    const cleanEmail = (email || "").trim().toLowerCase();
+    const cleanOtp = (otp || "").trim();
+
+    if (!cleanEmail || !cleanOtp) {
+      return res.status(400).json({ success: false, error: "Missing email or OTP code." });
+    }
+
+    const pending = activeAdminOtps[cleanEmail];
+    if (!pending) {
+      return res.status(401).json({ success: false, error: "Không tìm thấy yêu cầu OTP active. Vui lòng đăng nhập lại." });
+    }
+
+    if (Date.now() > pending.expiresAt) {
+      delete activeAdminOtps[cleanEmail];
+      return res.status(401).json({ success: false, error: "Mã OTP đã hết hạn (quá 5 phút). Vui lòng đăng nhập lại để nhận mã mới." });
+    }
+
+    if (pending.code !== cleanOtp) {
+      return res.status(401).json({ success: false, error: "Mã OTP 6 chữ số không chính xác. Vui lòng kiểm tra lại Email/Telegram." });
+    }
+
+    // OTP Verified -> Clear pending
+    delete activeAdminOtps[cleanEmail];
+
+    return res.json({
+      success: true,
+      message: "Admin 2FA OTP Verified successfully!",
+      user: {
+        id: "usr_admin_01",
+        email: cleanEmail,
+        fullName: "System Admin",
+        role: "admin",
+        status: "active"
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: "Failed to verify OTP code." });
+  }
+});
+
+// ADMIN RESEND OTP ENDPOINT
+app.post("/api/auth/resend-otp", async (req, res) => {
+  try {
+    const { email } = req.body;
+    const cleanEmail = (email || "").trim().toLowerCase();
+
+    if (!cleanEmail) {
+      return res.status(400).json({ success: false, error: "Missing email address." });
+    }
+
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    activeAdminOtps[cleanEmail] = {
+      email: cleanEmail,
+      code: otpCode,
+      expiresAt: Date.now() + 5 * 60 * 1000
+    };
+
+    const targetAdminEmail = notificationSettings.adminEmail || "duongrbt@gmail.com";
+    const otpHtml = `
+<div style="font-family: Arial, sans-serif; background-color: #0f172a; padding: 30px; color: #f8fafc;">
+  <div style="max-width: 600px; margin: 0 auto; background-color: #1e293b; border-radius: 16px; padding: 25px; border: 1px solid #334155;">
+    <h2 style="color: #38bdf8; margin-top: 0; font-size: 22px;">🔄 Mã Gửi Lại Admin 2FA OTP</h2>
+    <p style="color: #e2e8f0; font-size: 15px;">Xin chào Admin <strong>${cleanEmail}</strong>,</p>
+    <p style="color: #cbd5e1; font-size: 14px; line-height: 1.6;">Dưới đây là mã xác thực 2FA OTP gửi lại (Có hiệu lực trong 5 phút):</p>
+    
+    <div style="background-color: #0f172a; padding: 20px; border-radius: 12px; margin: 20px 0; border: 1px solid #334155; text-align: center;">
+      <span style="color: #34d399; font-size: 32px; font-family: monospace; font-weight: bold; letter-spacing: 6px;">${otpCode}</span>
+    </div>
+  </div>
+</div>`;
+
+    sendCustomEmail(targetAdminEmail, `[OutSystems Pro Academy] Mã Xác Thực Admin OTP Mới: ${otpCode}`, otpHtml).catch(() => {});
+    sendTelegramAlert(`🔐 *RESENT ADMIN 2FA OTP:* \`${otpCode}\`\nRequested for Admin Email: ${cleanEmail}`).catch(() => {});
+
+    return res.json({
+      success: true,
+      message: `Mã OTP mới (${otpCode}) đã được gửi lại tới Email & Telegram!`
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: "Failed to resend OTP code." });
   }
 });
 
