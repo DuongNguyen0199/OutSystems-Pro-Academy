@@ -29,10 +29,17 @@ export default function MockExam({
 
   if (!questions || questions.length === 0) {
     return (
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 text-center space-y-3">
-        <p className="text-xs font-bold text-slate-600">
-          No preview questions available for this course yet.
-        </p>
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4 animate-pulse">
+        <div className="flex items-center justify-between">
+          <div className="h-4 bg-slate-200 rounded w-1/4"></div>
+          <div className="h-4 bg-slate-200 rounded w-16"></div>
+        </div>
+        <div className="h-6 bg-slate-200 rounded w-3/4"></div>
+        <div className="space-y-2.5 pt-2">
+          {[1, 2, 3, 4].map(n => (
+            <div key={n} className="h-12 bg-slate-100 border border-slate-200 rounded-xl"></div>
+          ))}
+        </div>
       </div>
     );
   }
