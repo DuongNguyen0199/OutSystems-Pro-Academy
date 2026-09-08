@@ -2036,6 +2036,9 @@ ${incorrectKeys.map((k: string) => `${k}. Incorrect, because [Provide a precise 
 
     if (customApiKey) {
       try {
+        const providerName = customBaseUrl.includes("groq") ? "Groq (Llama 3.3 70B)" : customBaseUrl.includes("deepseek") ? "DeepSeek" : customBaseUrl.includes("openrouter") ? "OpenRouter" : "OpenAI";
+        console.log(`[AI Explain] Calling External Provider: ${providerName} (${customBaseUrl}) with model ${customModel}...`);
+
         const response = await fetch(`${customBaseUrl.replace(/\/$/, '')}/chat/completions`, {
           method: "POST",
           headers: {
@@ -2055,10 +2058,13 @@ ${incorrectKeys.map((k: string) => `${k}. Incorrect, because [Provide a precise 
         const aiData = await response.json();
         const outputText = aiData?.choices?.[0]?.message?.content;
         if (outputText) {
-          return res.json({ success: true, explanation: outputText.replace(/\*/g, '').trim() });
+          console.log(`[AI Explain] Successfully generated response from ${providerName}`);
+          return res.json({ success: true, explanation: outputText.replace(/\*/g, '').trim(), provider: providerName });
+        } else {
+          console.error(`[AI Explain Error] Provider ${providerName} returned empty text or error:`, JSON.stringify(aiData));
         }
       } catch (err: any) {
-        console.warn("External OpenAI/DeepSeek AI API note:", err.message);
+        console.error("[AI Explain Fetch Error]:", err.message);
       }
     }
 

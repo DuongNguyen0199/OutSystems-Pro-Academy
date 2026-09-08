@@ -346,7 +346,7 @@ export default function MockExam({
                     </div>
                     <div>
                       <p className="text-xs font-bold text-slate-900">AI Study Tutor</p>
-                      <p className="text-[10px] text-slate-400 font-medium">Deep study analysis using Gemini 3.5</p>
+                      <p className="text-[10px] text-slate-400 font-medium">Deep architectural analysis with AI Tutor</p>
                     </div>
                   </div>
 
@@ -363,7 +363,7 @@ export default function MockExam({
                 {loadingAi[currentQuestion.id] && (
                   <div className="flex items-center gap-2 text-xs text-purple-700 font-semibold py-3.5 bg-purple-50/20 rounded-xl border border-purple-100/30 justify-center">
                     <Loader2 className="w-4 h-4 animate-spin text-purple-500" />
-                    <span>Analyzing architectural concepts with Gemini AI...</span>
+                    <span>Analyzing architectural concepts with AI Engine...</span>
                   </div>
                 )}
 
