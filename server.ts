@@ -47,6 +47,7 @@ function getSupabase() {
 // Course ID to UUID Resolver Map for Supabase 3NF schema compliance
 const COURSE_ID_TO_UUID: Record<string, string> = {
   'course_assoc_reactive_o11': '70daa8a9-20c7-4993-b292-54566ef12303',
+  'course_assoc_web_o11': '636f7572-7365-4f63-a573-746f6d5f3137',
   'course_arch_odc': '56c652a7-7d07-41ea-bfe7-c19acd320420',
   'course_agentic_ai_odc': '48ad6d82-3994-490a-a4f4-c07f0a7a38db',
   'course_arch_o11': '2867b931-1550-424a-939e-99083bc56c12',
@@ -55,8 +56,8 @@ const COURSE_ID_TO_UUID: Record<string, string> = {
   'course_mobile_o11': 'fe771120-410a-4859-994c-120019283401',
   'course_web_o11': 'c9019208-1192-421b-8711-540192837101',
   'course_frontend_o11': '89102931-1029-4102-8812-109283019201',
-  'course_delivery_o11': 'e1029381-1920-4102-9812-109283019201',
-  'course_platform_ops_o11': 'd0192831-1092-4102-9812-109283019201'
+  'course_delivery_o11': 'e1029381-1920-4819-9182-109283019201',
+  'course_platform_ops_o11': 'd0192831-1092-4192-8812-109283019201'
 };
 
 function resolveCourseUuid(cId: string): string {
@@ -896,8 +897,8 @@ async function repairSupabaseCoursesTable() {
   }
 }
 
-// Auto-repair on startup
-repairSupabaseCoursesTable();
+// Auto-repair on startup DISABLED - Server MUST NEVER mutate Supabase courses table automatically on startup!
+// repairSupabaseCoursesTable();
 
 // Course Management Endpoint (Role: Admin ONLY)
 app.post("/api/admin/courses/upsert", requireAdminAuth, async (req, res) => {
