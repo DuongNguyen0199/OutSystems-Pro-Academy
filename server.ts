@@ -2092,17 +2092,31 @@ ${incorrectKeys.map((k: string) => `${k}. Incorrect, because [Provide a precise 
       }
     }
 
-    // Fallback Response adhering strictly to the user format
+    // Fallback Response adhering strictly to the user format (Context-aware dynamic fallback)
+    console.warn("[AI Explain Warning] No active AI Provider response received. Check GROQ_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY on Render.");
+
     const fallbackIncorrectList = incorrectKeys.map((k: string) => {
-      return `${k}. Incorrect, because this choice causes tight module coupling or fails to properly manage OutSystems runtime lifecycle events.`;
+      const optionObj = targetChoices.find((c: any) => c.key === k);
+      const optionText = optionObj ? optionObj.text : `Option ${k}`;
+
+      let reason = `it does not satisfy the specific requirement specified in the question.`;
+      if (/business|role|sponsor|owner|analyst|specialist|manager|positioning/i.test(prefixedQuestion)) {
+        reason = `this role or action does not hold the primary authority or scope for this requirement.`;
+      } else if (/database|aggregate|sql|entity|data/i.test(prefixedQuestion)) {
+        reason = `it introduces inefficient data fetching or invalid entity modeling.`;
+      } else if (/screen|client|ui|widget|action|lifecycle/i.test(prefixedQuestion)) {
+        reason = `it violates OutSystems Reactive UI client/server execution boundaries.`;
+      }
+
+      return `${k}. Incorrect, because ${reason}`;
     }).join('\n\n');
 
     const fallbackOutput = `=> Correct Answer: ${targetCorrectKey}
-Because ${baseExplanation || `it aligns directly with OutSystems enterprise architecture guidelines for scalable and maintainable application design.`}
+Because ${baseExplanation || `it directly satisfies the primary objective and official OutSystems guidelines.`}
 
-${fallbackIncorrectList || `B. Incorrect, because it fails to satisfy key platform requirements.`}`;
+${fallbackIncorrectList}`;
 
-    return res.json({ success: true, explanation: fallbackOutput.replace(/\*/g, '').trim() });
+    return res.json({ success: true, explanation: fallbackOutput.replace(/\*/g, '').trim(), provider: "fallback" });
   } catch (err: any) {
     console.error("AI Explain endpoint error:", err);
     return res.json({
