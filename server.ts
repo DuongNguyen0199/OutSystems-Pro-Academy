@@ -2015,7 +2015,7 @@ ${incorrectKeys.map((k: string) => `${k}. Incorrect, because [Provide a precise 
     const userPrompt = `OutSystems Question & Options:\n"${fullQuestionContext}"\n\nCorrect Answer: Option ${targetCorrectKey}`;
 
     // Provider 1: Groq / OpenAI / DeepSeek / OpenRouter / Custom OpenAI-compatible Endpoint
-    const customApiKey = process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY || process.env.DEEPSEEK_API_KEY || process.env.OPENROUTER_API_KEY || process.env.AI_API_KEY || process.env.CUSTOM_AI_API_KEY;
+    const rawApiKey = process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY || process.env.DEEPSEEK_API_KEY || process.env.OPENROUTER_API_KEY || process.env.AI_API_KEY || process.env.CUSTOM_AI_API_KEY;
     
     let defaultBaseUrl = "https://api.openai.com/v1";
     let defaultModel = "gpt-4o-mini";
@@ -2031,15 +2031,19 @@ ${incorrectKeys.map((k: string) => `${k}. Incorrect, because [Provide a precise 
       defaultModel = "google/gemini-2.0-flash-001";
     }
 
-    const customBaseUrl = process.env.AI_BASE_URL || defaultBaseUrl;
-    const customModel = process.env.AI_MODEL || defaultModel;
+    const rawBaseUrl = process.env.AI_BASE_URL || defaultBaseUrl;
+    const rawModel = process.env.AI_MODEL || defaultModel;
+
+    const customApiKey = (rawApiKey || "").trim();
+    const customBaseUrl = (rawBaseUrl || "").trim().replace(/\/$/, '');
+    const customModel = (rawModel || "").trim();
 
     if (customApiKey) {
       try {
         const providerName = customBaseUrl.includes("groq") ? "Groq (Llama 3.3 70B)" : customBaseUrl.includes("deepseek") ? "DeepSeek" : customBaseUrl.includes("openrouter") ? "OpenRouter" : "OpenAI";
-        console.log(`[AI Explain] Calling External Provider: ${providerName} (${customBaseUrl}) with model ${customModel}...`);
+        console.log(`[AI Explain] Calling External Provider: ${providerName} (${customBaseUrl}) with model "${customModel}"...`);
 
-        const response = await fetch(`${customBaseUrl.replace(/\/$/, '')}/chat/completions`, {
+        const response = await fetch(`${customBaseUrl}/chat/completions`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -2061,7 +2065,13 @@ ${incorrectKeys.map((k: string) => `${k}. Incorrect, because [Provide a precise 
           console.log(`[AI Explain] Successfully generated response from ${providerName}`);
           return res.json({ success: true, explanation: outputText.replace(/\*/g, '').trim(), provider: providerName });
         } else {
-          console.error(`[AI Explain Error] Provider ${providerName} returned empty text or error:`, JSON.stringify(aiData));
+          const apiErrMsg = aiData?.error?.message || aiData?.message || JSON.stringify(aiData);
+          console.error(`[AI Explain Error] Provider ${providerName} HTTP ${response.status}:`, apiErrMsg);
+          return res.json({
+            success: true,
+            explanation: `⚠️ AI API Error (${response.status}): ${apiErrMsg}\n\nPlease check your configuration on Render.`,
+            provider: providerName
+          });
         }
       } catch (err: any) {
         console.error("[AI Explain Fetch Error]:", err.message);
