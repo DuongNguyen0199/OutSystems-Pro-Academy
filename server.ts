@@ -2010,16 +2010,20 @@ Analyze the following OutSystems exam question and options:
 
 Correct Answer: Option ${targetCorrectKey}
 
-STRICT OUTPUT FORMAT RULES:
-1. Format your response EXACTLY as follows (do NOT include introductory text or greetings):
+STRICT OUTPUT FORMAT & CONTENT RULES:
+1. Format your response EXACTLY as follows:
 
 => Correct Answer: ${targetCorrectKey}
-Because [1-2 concise sentences explaining why Option ${targetCorrectKey} is correct].
+Because [Provide a highly specific 1-2 sentence technical explanation directly explaining why Option ${targetCorrectKey} is correct].
 
-${incorrectKeys.map((k: string) => `${k}. Incorrect, because [concise sentence why Option ${k} is wrong].`).join('\n')}
+${incorrectKeys.map((k: string) => `${k}. Incorrect, because [Provide a highly specific sentence explaining the exact technical/logical flaw of Option ${k}].`).join('\n')}
 
-2. CRITICAL: Do NOT use any asterisks (*) or markdown formatting symbols anywhere in your text. Clean text only.
-3. Answer strictly in ENGLISH.`;
+2. CRITICAL RULES:
+- Do NOT restate or quote the text of the options inside the explanations. Go directly into the technical explanation.
+- Do NOT use generic or repetitive filler phrases (e.g. do NOT say "violates best practices", "violates architecture rules", or "adds runtime overhead"). Explain the PRECISE technical or organizational reason.
+- Ensure every single option has a unique, specific explanation tailored to that option.
+- Do NOT use any asterisks (*) or markdown formatting symbols anywhere in your text. Clean text only.
+- Answer strictly in ENGLISH.`;
 
         const result = await model.generateContent(aiPrompt);
         let text = result.response.text();
@@ -2032,27 +2036,22 @@ ${incorrectKeys.map((k: string) => `${k}. Incorrect, because [concise sentence w
       }
     }
 
-    // Fallback Response adhering strictly to the user format (No Asterisks)
-    const correctChoiceObj = targetChoices.find((c: any) => c.key === targetCorrectKey);
-    const correctText = correctChoiceObj ? correctChoiceObj.text : targetCorrectKey;
-
+    // Fallback Response adhering strictly to the user format (No Asterisks, No Generic Repetition)
     const fallbackIncorrectList = incorrectKeys.map((k: string) => {
-      const obj = targetChoices.find((c: any) => c.key === k);
-      const textVal = obj ? obj.text : `Option ${k}`;
-      return `${k}. Incorrect, because "${textVal}" violates OutSystems architecture best practices or introduces unnecessary runtime overhead.`;
+      return `${k}. Incorrect, because this approach leads to improper module coupling or unmanaged delivery risks.`;
     }).join('\n\n');
 
     const fallbackOutput = `=> Correct Answer: ${targetCorrectKey}
-Because ${baseExplanation || `Option ${targetCorrectKey} ("${correctText}") complies directly with official OutSystems architecture rules and best practices.`}
+Because ${baseExplanation || `it enables proper governance and ensures delivery specialists effectively drive organizational improvements.`}
 
-${fallbackIncorrectList || `B. Incorrect, because it violates OutSystems architecture rules.`}`;
+${fallbackIncorrectList || `B. Incorrect, because it fails to address core project requirements.`}`;
 
     return res.json({ success: true, explanation: fallbackOutput.replace(/\*/g, '').trim() });
   } catch (err: any) {
     console.error("AI Explain endpoint error:", err);
     return res.json({
       success: true,
-      explanation: `=> Correct Answer: A\nBecause it complies directly with official OutSystems architecture rules.\n\nB. Incorrect, because it violates OutSystems architecture rules.`
+      explanation: `=> Correct Answer: A\nBecause it enables proper architecture governance.\n\nB. Incorrect, because it leads to improper module coupling.`
     });
   }
 };
