@@ -1994,57 +1994,92 @@ const handleAiExplainRequest = async (req: express.Request, res: express.Respons
       .map((c: any) => (c.key || '').trim().toUpperCase())
       .filter((k: string) => k && k !== targetCorrectKey);
 
-    // Check if Gemini API key is available in environment
-    const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+    const systemInstruction = `You are a Principal OutSystems Enterprise Architect & Lead Certification Examiner.
+Analyze the provided OutSystems exam question and options with high technical precision.
 
+STRICT OUTPUT FORMAT RULES:
+1. Format your response EXACTLY as follows (no greetings, no intro):
+
+=> Correct Answer: ${targetCorrectKey}
+Because [Provide a deep, highly intelligent, technically precise 1-2 sentence explanation of why Option ${targetCorrectKey} is correct under official OutSystems framework principles].
+
+${incorrectKeys.map((k: string) => `${k}. Incorrect, because [Provide a precise technical explanation of the exact flaw or risk in Option ${k}].`).join('\n')}
+
+2. CRITICAL RULES:
+- Do NOT restate or quote the text of the options inside the explanations.
+- Do NOT use generic filler phrases (e.g., "violates best practices", "adds overhead", "violates architecture rules"). Explain the exact technical mechanism (e.g. lifecycle execution order, database locking, state management, module circular dependency, reactive client/server boundary, Architecture Canvas layer rules).
+- Ensure every option explanation is 100% unique and specific.
+- Do NOT use any asterisks (*) or markdown symbols anywhere. Clean text only.
+- Answer strictly in ENGLISH.`;
+
+    const userPrompt = `OutSystems Question & Options:\n"${fullQuestionContext}"\n\nCorrect Answer: Option ${targetCorrectKey}`;
+
+    // Provider 1: OpenAI / DeepSeek / OpenRouter / Custom OpenAI-compatible Endpoint
+    const customApiKey = process.env.OPENAI_API_KEY || process.env.DEEPSEEK_API_KEY || process.env.OPENROUTER_API_KEY || process.env.AI_API_KEY || process.env.CUSTOM_AI_API_KEY;
+    const customBaseUrl = process.env.AI_BASE_URL || (process.env.DEEPSEEK_API_KEY ? "https://api.deepseek.com/v1" : process.env.OPENROUTER_API_KEY ? "https://openrouter.ai/api/v1" : "https://api.openai.com/v1");
+    const customModel = process.env.AI_MODEL || (process.env.DEEPSEEK_API_KEY ? "deepseek-chat" : process.env.OPENROUTER_API_KEY ? "google/gemini-2.0-flash-001" : "gpt-4o-mini");
+
+    if (customApiKey) {
+      try {
+        const response = await fetch(`${customBaseUrl.replace(/\/$/, '')}/chat/completions`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${customApiKey}`
+          },
+          body: JSON.stringify({
+            model: customModel,
+            messages: [
+              { role: "system", content: systemInstruction },
+              { role: "user", content: userPrompt }
+            ],
+            temperature: 0.3
+          })
+        });
+
+        const aiData = await response.json();
+        const outputText = aiData?.choices?.[0]?.message?.content;
+        if (outputText) {
+          return res.json({ success: true, explanation: outputText.replace(/\*/g, '').trim() });
+        }
+      } catch (err: any) {
+        console.warn("External OpenAI/DeepSeek AI API note:", err.message);
+      }
+    }
+
+    // Provider 2: Google Gemini (gemini-2.0-flash / gemini-1.5-pro)
+    const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
     if (geminiApiKey) {
       try {
         const { GoogleGenerativeAI } = require("@google/generative-ai");
         const genAI = new GoogleGenerativeAI(geminiApiKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const modelName = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+        let model;
+        try {
+          model = genAI.getGenerativeModel({ model: modelName });
+        } catch (e) {
+          model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        }
 
-        const aiPrompt = `You are an OutSystems Certified Enterprise Architect.
-Analyze the following OutSystems exam question and options:
-
-"${fullQuestionContext}"
-
-Correct Answer: Option ${targetCorrectKey}
-
-STRICT OUTPUT FORMAT & CONTENT RULES:
-1. Format your response EXACTLY as follows:
-
-=> Correct Answer: ${targetCorrectKey}
-Because [Provide a highly specific 1-2 sentence technical explanation directly explaining why Option ${targetCorrectKey} is correct].
-
-${incorrectKeys.map((k: string) => `${k}. Incorrect, because [Provide a highly specific sentence explaining the exact technical/logical flaw of Option ${k}].`).join('\n')}
-
-2. CRITICAL RULES:
-- Do NOT restate or quote the text of the options inside the explanations. Go directly into the technical explanation.
-- Do NOT use generic or repetitive filler phrases (e.g. do NOT say "violates best practices", "violates architecture rules", or "adds runtime overhead"). Explain the PRECISE technical or organizational reason.
-- Ensure every single option has a unique, specific explanation tailored to that option.
-- Do NOT use any asterisks (*) or markdown formatting symbols anywhere in your text. Clean text only.
-- Answer strictly in ENGLISH.`;
-
-        const result = await model.generateContent(aiPrompt);
+        const result = await model.generateContent(`${systemInstruction}\n\n${userPrompt}`);
         let text = result.response.text();
         if (text) {
-          text = text.replace(/\*/g, '').trim();
-          return res.json({ success: true, explanation: text });
+          return res.json({ success: true, explanation: text.replace(/\*/g, '').trim() });
         }
       } catch (geminiErr: any) {
         console.warn("Gemini AI API note:", geminiErr.message);
       }
     }
 
-    // Fallback Response adhering strictly to the user format (No Asterisks, No Generic Repetition)
+    // Fallback Response adhering strictly to the user format
     const fallbackIncorrectList = incorrectKeys.map((k: string) => {
-      return `${k}. Incorrect, because this approach leads to improper module coupling or unmanaged delivery risks.`;
+      return `${k}. Incorrect, because this choice causes tight module coupling or fails to properly manage OutSystems runtime lifecycle events.`;
     }).join('\n\n');
 
     const fallbackOutput = `=> Correct Answer: ${targetCorrectKey}
-Because ${baseExplanation || `it enables proper governance and ensures delivery specialists effectively drive organizational improvements.`}
+Because ${baseExplanation || `it aligns directly with OutSystems enterprise architecture guidelines for scalable and maintainable application design.`}
 
-${fallbackIncorrectList || `B. Incorrect, because it fails to address core project requirements.`}`;
+${fallbackIncorrectList || `B. Incorrect, because it fails to satisfy key platform requirements.`}`;
 
     return res.json({ success: true, explanation: fallbackOutput.replace(/\*/g, '').trim() });
   } catch (err: any) {
