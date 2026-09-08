@@ -1975,14 +1975,24 @@ const handleAiExplainRequest = async (req: express.Request, res: express.Respons
   try {
     const { question, choices, correctAnswer, userAnswer, explanation, courseTitle, prompt } = req.body;
 
-    const targetQuestion = question || prompt || "OutSystems Certification Exam Question";
-    const targetChoices = Array.isArray(choices) ? choices : [];
-    const targetCorrectKey = correctAnswer || "A";
-    const targetUserKey = userAnswer || "Unanswered";
-    const baseExplanation = explanation || "";
+    const rawQuestion = (question || prompt || "OutSystems Certification Exam Question").trim();
+    const prefixedQuestion = /^in\s+outsystems/i.test(rawQuestion) 
+      ? rawQuestion 
+      : `In OutSystems, ${rawQuestion}`;
 
-    const correctChoiceObj = targetChoices.find((c: any) => c.key === targetCorrectKey);
-    const correctText = correctChoiceObj ? correctChoiceObj.text : targetCorrectKey;
+    const targetChoices = Array.isArray(choices) ? choices : [];
+    const targetCorrectKey = (correctAnswer || "A").trim().toUpperCase();
+    const baseExplanation = (explanation || "").trim();
+
+    const formattedChoices = targetChoices.length > 0 
+      ? targetChoices.map((c: any) => `${c.key}. ${c.text}`).join('\n')
+      : 'A. Option A\nB. Option B';
+
+    const fullQuestionContext = `${prefixedQuestion}\n\n${formattedChoices}`;
+
+    const incorrectKeys = targetChoices
+      .map((c: any) => (c.key || '').trim().toUpperCase())
+      .filter((k: string) => k && k !== targetCorrectKey);
 
     // Check if Gemini API key is available in environment
     const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
@@ -1993,41 +2003,28 @@ const handleAiExplainRequest = async (req: express.Request, res: express.Respons
         const genAI = new GoogleGenerativeAI(geminiApiKey);
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-        const optionsBreakdown = targetChoices.length > 0 
-          ? targetChoices.map((c: any) => `- Option ${c.key}: "${c.text}"`).join('\n')
-          : '';
-
-        const incorrectOptionsList = targetChoices
-          .filter((c: any) => c.key !== targetCorrectKey)
-          .map((c: any) => `- Option ${c.key} ("${c.text}"): Explain concisely why this option is eliminated / incorrect.`)
-          .join('\n');
-
         const aiPrompt = `You are an OutSystems Certified Enterprise Architect.
-Explain this OutSystems exam question concisely in ENGLISH.
+Analyze the following OutSystems exam question and options:
 
-Question: ${targetQuestion}
-Options:
-${optionsBreakdown}
+"${fullQuestionContext}"
 
-Correct Answer: Option ${targetCorrectKey} (${correctText})
+Correct Answer: Option ${targetCorrectKey}
 
-Strict Output Rules:
-1. Do NOT repeat the question context, scenario intro, or background.
-2. Keep explanation short, concise, and focused on facts.
-3. CRITICAL: Do NOT use any asterisks (*) or markdown formatting anywhere in your output. Clean text only.
-4. Use the Elimination Method (Phương pháp Loại Trừ) for wrong choices.
-5. Structure into EXACTLY TWO sections:
+STRICT OUTPUT FORMAT RULES:
+1. Format your response EXACTLY as follows (do NOT include introductory text or greetings):
 
-✅ Why Option ${targetCorrectKey} is Correct:
-(Explain directly in 1-2 concise sentences why Option ${targetCorrectKey} is correct)
+=> Correct Answer: ${targetCorrectKey}
+Because [1-2 concise sentences explaining why Option ${targetCorrectKey} is correct].
 
-❌ Elimination & Why Other Options are Incorrect:
-${incorrectOptionsList}`;
+${incorrectKeys.map((k: string) => `${k}. Incorrect, because [concise sentence why Option ${k} is wrong].`).join('\n')}
+
+2. CRITICAL: Do NOT use any asterisks (*) or markdown formatting symbols anywhere in your text. Clean text only.
+3. Answer strictly in ENGLISH.`;
 
         const result = await model.generateContent(aiPrompt);
         let text = result.response.text();
         if (text) {
-          text = text.replace(/\*/g, '');
+          text = text.replace(/\*/g, '').trim();
           return res.json({ success: true, explanation: text });
         }
       } catch (geminiErr: any) {
@@ -2035,24 +2032,27 @@ ${incorrectOptionsList}`;
       }
     }
 
-    // Concise Fallback Response with Elimination Method (No Asterisks)
-    const incorrectChoicesList = targetChoices
-      .filter((c: any) => c.key !== targetCorrectKey)
-      .map((c: any) => `• Option ${c.key} ("${c.text}"): Eliminated. Violates OutSystems Architecture rules or introduces unnecessary runtime overhead.`)
-      .join('\n');
+    // Fallback Response adhering strictly to the user format (No Asterisks)
+    const correctChoiceObj = targetChoices.find((c: any) => c.key === targetCorrectKey);
+    const correctText = correctChoiceObj ? correctChoiceObj.text : targetCorrectKey;
 
-    const expertOutput = `✅ Why Option ${targetCorrectKey} is Correct:
-• Technical Reason: ${baseExplanation || `Option ${targetCorrectKey} ("${correctText}") complies directly with OutSystems official architecture patterns, ensuring proper module separation and optimal runtime execution.`}
+    const fallbackIncorrectList = incorrectKeys.map((k: string) => {
+      const obj = targetChoices.find((c: any) => c.key === k);
+      const textVal = obj ? obj.text : `Option ${k}`;
+      return `${k}. Incorrect, because "${textVal}" violates OutSystems architecture best practices or introduces unnecessary runtime overhead.`;
+    }).join('\n\n');
 
-❌ Elimination & Why Other Options are Incorrect:
-${incorrectChoicesList || `• Other Options: Eliminated because they introduce architectural anti-patterns such as improper module coupling or invalid lifecycle execution.`}`;
+    const fallbackOutput = `=> Correct Answer: ${targetCorrectKey}
+Because ${baseExplanation || `Option ${targetCorrectKey} ("${correctText}") complies directly with official OutSystems architecture rules and best practices.`}
 
-    return res.json({ success: true, explanation: expertOutput.replace(/\*/g, '') });
+${fallbackIncorrectList || `B. Incorrect, because it violates OutSystems architecture rules.`}`;
+
+    return res.json({ success: true, explanation: fallbackOutput.replace(/\*/g, '').trim() });
   } catch (err: any) {
     console.error("AI Explain endpoint error:", err);
     return res.json({
       success: true,
-      explanation: "✅ **Why Correct:** Option complies with OutSystems official Architecture Canvas.\n\n❌ **Elimination:** Other choices introduce improper module coupling or invalid runtime execution."
+      explanation: `=> Correct Answer: A\nBecause it complies directly with official OutSystems architecture rules.\n\nB. Incorrect, because it violates OutSystems architecture rules.`
     });
   }
 };
