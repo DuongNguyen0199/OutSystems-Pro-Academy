@@ -2023,7 +2023,7 @@ ${incorrectKeys.map((k: string) => `${k}. Incorrect, because [Provide a precise 
 
     if (process.env.GROQ_API_KEY || (process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.startsWith("gsk_"))) {
       defaultBaseUrl = "https://api.groq.com/openai/v1";
-      defaultModel = "llama-3.1-8b-instant";
+      defaultModel = "openai/gpt-oss-20b";
     } else if (process.env.DEEPSEEK_API_KEY) {
       defaultBaseUrl = "https://api.deepseek.com/v1";
       defaultModel = "deepseek-chat";
@@ -2040,17 +2040,15 @@ ${incorrectKeys.map((k: string) => `${k}. Incorrect, because [Provide a precise 
     const customModel = (rawModel || "").trim();
 
     if (customApiKey) {
+      const isGroqProvider = customBaseUrl.includes("groq");
       const candidateModels = Array.from(new Set([
         customModel,
-        "llama-3.1-8b-instant",
-        "llama-3.3-70b-versatile",
-        "mixtral-8x7b-32768",
-        "gemma2-9b-it"
-      ])).filter(m => Boolean(m) && m !== "llama3-70b-8192" && m !== "llama3-8b-8192");
+        ...(isGroqProvider ? ["openai/gpt-oss-20b", "openai/gpt-oss-120b", "qwen/qwen3.6-27b"] : [])
+      ])).filter(m => Boolean(m) && !m.includes("llama3") && !m.includes("gemma2"));
 
       for (const modelToTry of candidateModels) {
         try {
-          const providerName = customBaseUrl.includes("groq") ? `Groq (${modelToTry})` : customBaseUrl.includes("deepseek") ? "DeepSeek" : customBaseUrl.includes("openrouter") ? "OpenRouter" : "OpenAI";
+          const providerName = isGroqProvider ? `Groq (${modelToTry})` : customBaseUrl.includes("deepseek") ? "DeepSeek" : customBaseUrl.includes("openrouter") ? "OpenRouter" : "OpenAI";
           console.log(`[AI Explain] Calling External Provider: ${providerName} (${customBaseUrl}) with model "${modelToTry}"...`);
 
           const response = await fetch(`${customBaseUrl}/chat/completions`, {
@@ -2079,17 +2077,12 @@ ${incorrectKeys.map((k: string) => `${k}. Incorrect, because [Provide a precise 
           const apiErrMsg = aiData?.error?.message || aiData?.message || JSON.stringify(aiData);
 
           // If model returned 404, 400 or decommissioned, try next candidate model
-          if ((response.status === 404 || response.status === 400 || apiErrMsg.toLowerCase().includes('decommissioned')) && modelToTry !== candidateModels[candidateModels.length - 1]) {
-            console.warn(`[AI Explain ${response.status}] Model "${modelToTry}" error (${apiErrMsg}). Auto-retrying with fallback model...`);
+          if (response.status === 404 || response.status === 400 || apiErrMsg.toLowerCase().includes('decommissioned')) {
+            console.warn(`[AI Explain ${response.status}] Model "${modelToTry}" error (${apiErrMsg}). Trying next model...`);
             continue;
           }
 
           console.error(`[AI Explain Error] Provider ${providerName} HTTP ${response.status}:`, apiErrMsg);
-          return res.json({
-            success: true,
-            explanation: `⚠️ AI API Error (${response.status}): ${apiErrMsg}\n\nPlease check your configuration on Render.`,
-            provider: providerName
-          });
         } catch (err: any) {
           console.error("[AI Explain Fetch Error]:", err.message);
         }
