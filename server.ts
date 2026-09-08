@@ -2022,7 +2022,7 @@ ${incorrectKeys.map((k: string) => `${k}. Incorrect, because [Provide a precise 
 
     if (process.env.GROQ_API_KEY || (process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.startsWith("gsk_"))) {
       defaultBaseUrl = "https://api.groq.com/openai/v1";
-      defaultModel = "llama-3.3-70b-versatile";
+      defaultModel = "llama-3.1-8b-instant";
     } else if (process.env.DEEPSEEK_API_KEY) {
       defaultBaseUrl = "https://api.deepseek.com/v1";
       defaultModel = "deepseek-chat";
@@ -2043,10 +2043,9 @@ ${incorrectKeys.map((k: string) => `${k}. Incorrect, because [Provide a precise 
         customModel,
         "llama-3.1-8b-instant",
         "llama-3.3-70b-versatile",
-        "llama3-70b-8192",
-        "llama3-8b-8192",
-        "mixtral-8x7b-32768"
-      ]));
+        "mixtral-8x7b-32768",
+        "gemma2-9b-it"
+      ])).filter(m => Boolean(m) && m !== "llama3-70b-8192" && m !== "llama3-8b-8192");
 
       for (const modelToTry of candidateModels) {
         try {
@@ -2076,13 +2075,14 @@ ${incorrectKeys.map((k: string) => `${k}. Incorrect, because [Provide a precise 
             return res.json({ success: true, explanation: outputText.replace(/\*/g, '').trim(), provider: providerName });
           }
 
-          // If model returned 404, try next candidate model
-          if (response.status === 404 && modelToTry !== candidateModels[candidateModels.length - 1]) {
-            console.warn(`[AI Explain 404] Model "${modelToTry}" returned 404. Auto-retrying with fallback model...`);
+          const apiErrMsg = aiData?.error?.message || aiData?.message || JSON.stringify(aiData);
+
+          // If model returned 404, 400 or decommissioned, try next candidate model
+          if ((response.status === 404 || response.status === 400 || apiErrMsg.toLowerCase().includes('decommissioned')) && modelToTry !== candidateModels[candidateModels.length - 1]) {
+            console.warn(`[AI Explain ${response.status}] Model "${modelToTry}" error (${apiErrMsg}). Auto-retrying with fallback model...`);
             continue;
           }
 
-          const apiErrMsg = aiData?.error?.message || aiData?.message || JSON.stringify(aiData);
           console.error(`[AI Explain Error] Provider ${providerName} HTTP ${response.status}:`, apiErrMsg);
           return res.json({
             success: true,
