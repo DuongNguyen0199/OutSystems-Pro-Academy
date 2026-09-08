@@ -2014,10 +2014,25 @@ ${incorrectKeys.map((k: string) => `${k}. Incorrect, because [Provide a precise 
 
     const userPrompt = `OutSystems Question & Options:\n"${fullQuestionContext}"\n\nCorrect Answer: Option ${targetCorrectKey}`;
 
-    // Provider 1: OpenAI / DeepSeek / OpenRouter / Custom OpenAI-compatible Endpoint
-    const customApiKey = process.env.OPENAI_API_KEY || process.env.DEEPSEEK_API_KEY || process.env.OPENROUTER_API_KEY || process.env.AI_API_KEY || process.env.CUSTOM_AI_API_KEY;
-    const customBaseUrl = process.env.AI_BASE_URL || (process.env.DEEPSEEK_API_KEY ? "https://api.deepseek.com/v1" : process.env.OPENROUTER_API_KEY ? "https://openrouter.ai/api/v1" : "https://api.openai.com/v1");
-    const customModel = process.env.AI_MODEL || (process.env.DEEPSEEK_API_KEY ? "deepseek-chat" : process.env.OPENROUTER_API_KEY ? "google/gemini-2.0-flash-001" : "gpt-4o-mini");
+    // Provider 1: Groq / OpenAI / DeepSeek / OpenRouter / Custom OpenAI-compatible Endpoint
+    const customApiKey = process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY || process.env.DEEPSEEK_API_KEY || process.env.OPENROUTER_API_KEY || process.env.AI_API_KEY || process.env.CUSTOM_AI_API_KEY;
+    
+    let defaultBaseUrl = "https://api.openai.com/v1";
+    let defaultModel = "gpt-4o-mini";
+
+    if (process.env.GROQ_API_KEY || (process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.startsWith("gsk_"))) {
+      defaultBaseUrl = "https://api.groq.com/openai/v1";
+      defaultModel = "llama-3.3-70b-versatile";
+    } else if (process.env.DEEPSEEK_API_KEY) {
+      defaultBaseUrl = "https://api.deepseek.com/v1";
+      defaultModel = "deepseek-chat";
+    } else if (process.env.OPENROUTER_API_KEY) {
+      defaultBaseUrl = "https://openrouter.ai/api/v1";
+      defaultModel = "google/gemini-2.0-flash-001";
+    }
+
+    const customBaseUrl = process.env.AI_BASE_URL || defaultBaseUrl;
+    const customModel = process.env.AI_MODEL || defaultModel;
 
     if (customApiKey) {
       try {
