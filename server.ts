@@ -2039,32 +2039,49 @@ ${incorrectKeys.map((k: string) => `${k}. Incorrect, because [Provide a precise 
     const customModel = (rawModel || "").trim();
 
     if (customApiKey) {
-      try {
-        const providerName = customBaseUrl.includes("groq") ? "Groq (Llama 3.3 70B)" : customBaseUrl.includes("deepseek") ? "DeepSeek" : customBaseUrl.includes("openrouter") ? "OpenRouter" : "OpenAI";
-        console.log(`[AI Explain] Calling External Provider: ${providerName} (${customBaseUrl}) with model "${customModel}"...`);
+      const candidateModels = Array.from(new Set([
+        customModel,
+        "llama-3.1-8b-instant",
+        "llama-3.3-70b-versatile",
+        "llama3-70b-8192",
+        "llama3-8b-8192",
+        "mixtral-8x7b-32768"
+      ]));
 
-        const response = await fetch(`${customBaseUrl}/chat/completions`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${customApiKey}`
-          },
-          body: JSON.stringify({
-            model: customModel,
-            messages: [
-              { role: "system", content: systemInstruction },
-              { role: "user", content: userPrompt }
-            ],
-            temperature: 0.3
-          })
-        });
+      for (const modelToTry of candidateModels) {
+        try {
+          const providerName = customBaseUrl.includes("groq") ? `Groq (${modelToTry})` : customBaseUrl.includes("deepseek") ? "DeepSeek" : customBaseUrl.includes("openrouter") ? "OpenRouter" : "OpenAI";
+          console.log(`[AI Explain] Calling External Provider: ${providerName} (${customBaseUrl}) with model "${modelToTry}"...`);
 
-        const aiData = await response.json();
-        const outputText = aiData?.choices?.[0]?.message?.content;
-        if (outputText) {
-          console.log(`[AI Explain] Successfully generated response from ${providerName}`);
-          return res.json({ success: true, explanation: outputText.replace(/\*/g, '').trim(), provider: providerName });
-        } else {
+          const response = await fetch(`${customBaseUrl}/chat/completions`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${customApiKey}`
+            },
+            body: JSON.stringify({
+              model: modelToTry,
+              messages: [
+                { role: "system", content: systemInstruction },
+                { role: "user", content: userPrompt }
+              ],
+              temperature: 0.3
+            })
+          });
+
+          const aiData = await response.json();
+          const outputText = aiData?.choices?.[0]?.message?.content;
+          if (outputText) {
+            console.log(`[AI Explain] Successfully generated response from ${providerName}`);
+            return res.json({ success: true, explanation: outputText.replace(/\*/g, '').trim(), provider: providerName });
+          }
+
+          // If model returned 404, try next candidate model
+          if (response.status === 404 && modelToTry !== candidateModels[candidateModels.length - 1]) {
+            console.warn(`[AI Explain 404] Model "${modelToTry}" returned 404. Auto-retrying with fallback model...`);
+            continue;
+          }
+
           const apiErrMsg = aiData?.error?.message || aiData?.message || JSON.stringify(aiData);
           console.error(`[AI Explain Error] Provider ${providerName} HTTP ${response.status}:`, apiErrMsg);
           return res.json({
@@ -2072,9 +2089,9 @@ ${incorrectKeys.map((k: string) => `${k}. Incorrect, because [Provide a precise 
             explanation: `⚠️ AI API Error (${response.status}): ${apiErrMsg}\n\nPlease check your configuration on Render.`,
             provider: providerName
           });
+        } catch (err: any) {
+          console.error("[AI Explain Fetch Error]:", err.message);
         }
-      } catch (err: any) {
-        console.error("[AI Explain Fetch Error]:", err.message);
       }
     }
 
