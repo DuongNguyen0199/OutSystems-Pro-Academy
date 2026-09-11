@@ -102,6 +102,7 @@ const notificationSettings = {
 // Course fetching endpoint (Item 4: Alphabetical A -> Z sorting for all roles)
 app.get("/api/courses", async (req, res) => {
   try {
+    res.setHeader("Cache-Control", "public, max-age=60, s-maxage=300");
     const supabase = getSupabase();
     let coursesData = fallbackCourses;
 
@@ -110,20 +111,6 @@ app.get("/api/courses", async (req, res) => {
       if (!error && data && data.length > 0) {
         coursesData = [...data];
       }
-    }
-
-    // Dynamic questions & practice exam matching from 3NF Supabase schema ('exam_questions' & 'question_options')
-    let dbExamQuestions: any[] = [];
-    let dbQuestionOptions: any[] = [];
-
-    if (supabase) {
-      try {
-        const { data: eqData } = await supabase.from("exam_questions").select("*");
-        if (eqData) dbExamQuestions = eqData;
-
-        const { data: optData } = await supabase.from("question_options").select("*");
-        if (optData) dbQuestionOptions = optData;
-      } catch (e) {}
     }
 
     const mapped = coursesData.map((item: any) => {
@@ -155,42 +142,15 @@ app.get("/api/courses", async (req, res) => {
       }
 
       let imageUrl = item.image_url || item.imageUrl || item.image || (fallback ? fallback.imageUrl : "/src/assets/images/agentic_ai_1783426796399.jpg");
+      const resolvedPrice = Number(item.price) || (fallback ? fallback.price : 499000);
 
       const targetUuid = resolveCourseUuid(item.id);
-      const hex = targetUuid.replace(/-/g, '');
-      const targetExamId = `${hex.substring(0, 8)}-${hex.substring(8, 12)}-4${hex.substring(13, 16)}-a${hex.substring(17, 20)}-${hex.substring(20, 32)}`;
 
       // Check if memory has freshly imported questions for this course
       let mockExam = inMemoryCourseQuestions[item.id] || inMemoryCourseQuestions[targetUuid];
 
       if (!mockExam || mockExam.length === 0) {
-        const matchedEqs = dbExamQuestions.filter((eq: any) => 
-          eq.exam_id === targetExamId || 
-          eq.exam_id === item.id || 
-          eq.course_id === targetUuid || 
-          eq.course_id === item.id
-        );
-
-        if (matchedEqs.length > 0) {
-          mockExam = matchedEqs.map((eq: any) => {
-            const opts = dbQuestionOptions.filter((o: any) => o.question_id === eq.id);
-            const choices = opts.length > 0 
-              ? opts.map((o: any) => ({ key: o.option_key, text: o.option_text }))
-              : [
-                  { key: 'A', text: 'Option A' },
-                  { key: 'B', text: 'Option B' }
-                ];
-
-            return {
-              id: eq.id,
-              question: eq.question_text,
-              choices: choices,
-              correctAnswer: eq.correct_answer || 'A',
-              explanation: eq.explanation || "Official OutSystems Exam Question",
-              imageUrl: eq.image_url || undefined
-            };
-          });
-        } else if (fallback) {
+        if (fallback && fallback.mockExam) {
           mockExam = fallback.mockExam;
         } else {
           mockExam = [];

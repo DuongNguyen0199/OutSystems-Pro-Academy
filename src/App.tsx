@@ -13,7 +13,16 @@ import { Course, UserProfile } from './types';
 import { Search, Mail, AlertCircle, Sparkles, Copy, Check, Youtube } from 'lucide-react';
 
 export default function App() {
-  const [coursesList, setCoursesList] = useState<Course[]>(fallbackCourses);
+  const [coursesList, setCoursesList] = useState<Course[]>(() => {
+    const cached = localStorage.getItem('outsystems_courses_cache');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
+    }
+    return fallbackCourses;
+  });
   const [dbSource, setDbSource] = useState<string>('local');
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -39,7 +48,7 @@ export default function App() {
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [copied, setCopied] = useState(false);
 
   // Load user session and dynamic courses on mount
@@ -57,8 +66,11 @@ export default function App() {
         return res.json();
       })
       .then((data) => {
-        if (data && data.data) {
+        if (data && data.data && Array.isArray(data.data) && data.data.length > 0) {
           setCoursesList(data.data);
+          try {
+            localStorage.setItem('outsystems_courses_cache', JSON.stringify(data.data));
+          } catch (e) {}
         }
         if (data && data.source) {
           setDbSource(data.source);
