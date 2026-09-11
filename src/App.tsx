@@ -9,8 +9,51 @@ import ActivationCodeModal from './components/ActivationCodeModal';
 import UdemyMockExam from './components/UdemyMockExam';
 import AdminDashboard from './components/AdminDashboard';
 import { fallbackCourses } from './data_fallback';
+import { PREPOPULATED_COURSES_DATA } from './prepopulated_courses_data';
 import { Course, UserProfile } from './types';
 import { Search, Mail, AlertCircle, Sparkles, Copy, Check, Youtube } from 'lucide-react';
+
+const prepopulatedList = Object.keys(PREPOPULATED_COURSES_DATA).map(k => ({
+  key: k,
+  ...PREPOPULATED_COURSES_DATA[k]
+}));
+
+function getPrepopulated(title: string) {
+  const cleanTitle = (title || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  return prepopulatedList.find((p: any) => {
+    const pKey = p.key.toLowerCase();
+    if (cleanTitle.includes('agentic') && pKey.includes('399')) return true;
+    if (cleanTitle.includes('architecture') && cleanTitle.includes('o11') && pKey.includes('400')) return true;
+    if (cleanTitle.includes('architecture') && cleanTitle.includes('odc') && pKey.includes('401')) return true;
+    if (cleanTitle.includes('delivery') && pKey.includes('402')) return true;
+    if (cleanTitle.includes('frontend') && pKey.includes('403')) return true;
+    if (cleanTitle.includes('mobile') && pKey.includes('404')) return true;
+    if (cleanTitle.includes('ops') && pKey.includes('405')) return true;
+    if (cleanTitle.includes('reactive') && pKey.includes('406')) return true;
+    if (cleanTitle.includes('security') && pKey.includes('407')) return true;
+    if (cleanTitle.includes('techlead') && pKey.includes('408')) return true;
+    if (cleanTitle.includes('traditional') && pKey.includes('409')) return true;
+    if (cleanTitle.includes('webdeveloper') && pKey.includes('410')) return true;
+    return false;
+  });
+}
+
+function enrichCourseList(list: Course[]): Course[] {
+  return list.map((c: any) => {
+    const p = getPrepopulated(c.title);
+    const sets = (c.examSets && Array.isArray(c.examSets) && c.examSets.length > 0 && c.examSets.reduce((sum: number, s: any) => sum + (s.questions ? s.questions.length : 0), 0) > 0)
+      ? c.examSets
+      : (p ? p.examSets : []);
+    const mock = (c.mockExam && Array.isArray(c.mockExam) && c.mockExam.length > 0)
+      ? c.mockExam
+      : (sets.length > 0 ? sets.flatMap((s: any) => s.questions || []) : (p ? p.mockExam : []));
+    return {
+      ...c,
+      examSets: sets,
+      mockExam: mock
+    };
+  });
+}
 
 export default function App() {
   const [coursesList, setCoursesList] = useState<Course[]>(() => {
@@ -18,10 +61,13 @@ export default function App() {
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const totalQ = parsed.reduce((sum: number, c: any) => sum + (c.mockExam?.length || 0), 0);
+          if (totalQ > 0) return parsed;
+        }
       } catch (e) {}
     }
-    return fallbackCourses;
+    return enrichCourseList(fallbackCourses);
   });
   const [dbSource, setDbSource] = useState<string>('local');
   const [searchQuery, setSearchQuery] = useState('');
@@ -67,9 +113,10 @@ export default function App() {
       })
       .then((data) => {
         if (data && data.data && Array.isArray(data.data) && data.data.length > 0) {
-          setCoursesList(data.data);
+          const enriched = enrichCourseList(data.data);
+          setCoursesList(enriched);
           try {
-            localStorage.setItem('outsystems_courses_cache', JSON.stringify(data.data));
+            localStorage.setItem('outsystems_courses_cache', JSON.stringify(enriched));
           } catch (e) {}
         }
         if (data && data.source) {

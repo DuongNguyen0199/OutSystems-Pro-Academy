@@ -1,4 +1,5 @@
 import { Course } from './types';
+import { PREPOPULATED_COURSES_DATA } from './prepopulated_courses_data';
 
 export const fallbackCourses: Course[] = [
   {

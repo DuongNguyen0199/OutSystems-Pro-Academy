@@ -149,14 +149,6 @@ app.get("/api/courses", async (req, res) => {
       // Check if memory has freshly imported questions for this course
       let mockExam = inMemoryCourseQuestions[item.id] || inMemoryCourseQuestions[targetUuid];
 
-      if (!mockExam || mockExam.length === 0) {
-        if (fallback && fallback.mockExam) {
-          mockExam = fallback.mockExam;
-        } else {
-          mockExam = [];
-        }
-      }
-
       // Parse exam_sets from DB row (handles string or JSONB)
       let sets = item.exam_sets;
       if (typeof sets === 'string') {
@@ -167,31 +159,30 @@ app.get("/api/courses", async (req, res) => {
         sets = inMemoryCourseExamSets[item.id] || inMemoryCourseExamSets[targetUuid];
       }
 
-      if (!sets || !Array.isArray(sets) || sets.length === 0) {
-        sets = fallback && fallback.examSets && fallback.examSets.length > 0 ? fallback.examSets : [
-          {
-            id: 'set-1',
-            title: 'Dump 01',
-            description: 'Bài kiểm tra thực hành Dump 01',
-            durationMinutes: 90,
-            passingScorePct: 70,
-            randomizeQuestions: false,
-            questions: mockExam
-          }
-        ];
-      } else {
-        // Ensure mockExam matches the questions from exam_sets if sets exists
-        const allSetQuestions = sets.flatMap((s: any) => s.questions || []);
-        if (allSetQuestions.length > 0) {
-          mockExam = allSetQuestions;
-        } else if (fallback && fallback.mockExam && fallback.mockExam.length > 0) {
-          mockExam = fallback.mockExam;
+      // Check prepopulated dataset for fallback questions if DB row has no questions
+      const prepopulated = getPrepopulatedForCourse(item.title || (fallback ? fallback.title : ''));
+
+      const setQuestionsCount = Array.isArray(sets) ? sets.reduce((sum: number, s: any) => sum + (s.questions ? s.questions.length : 0), 0) : 0;
+
+      if (!sets || !Array.isArray(sets) || sets.length === 0 || setQuestionsCount === 0) {
+        if (prepopulated && prepopulated.examSets && prepopulated.examSets.length > 0) {
+          sets = prepopulated.examSets;
+        } else if (fallback && fallback.examSets && fallback.examSets.length > 0) {
+          sets = fallback.examSets;
         }
       }
 
+      // Ensure mockExam is populated from sets or prepopulated
       if (!mockExam || mockExam.length === 0) {
-        if (fallback && fallback.mockExam && fallback.mockExam.length > 0) {
+        const allSetQuestions = Array.isArray(sets) ? sets.flatMap((s: any) => s.questions || []) : [];
+        if (allSetQuestions.length > 0) {
+          mockExam = allSetQuestions;
+        } else if (prepopulated && prepopulated.mockExam && prepopulated.mockExam.length > 0) {
+          mockExam = prepopulated.mockExam;
+        } else if (fallback && fallback.mockExam && fallback.mockExam.length > 0) {
           mockExam = fallback.mockExam;
+        } else {
+          mockExam = [];
         }
       }
 
