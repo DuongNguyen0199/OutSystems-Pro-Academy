@@ -169,7 +169,7 @@ export default function ActivationCodeModal({
               <div className="relative">
                 <input
                   type={showCode ? 'text' : 'password'}
-                  placeholder="e.g. OSJSZNC3HWTC"
+                  placeholder="e.g. OSEXAMCODE"
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-xl py-3 pl-4 pr-11 text-sm font-mono font-bold tracking-wider text-slate-900 placeholder-slate-400 outline-none transition-all uppercase"
