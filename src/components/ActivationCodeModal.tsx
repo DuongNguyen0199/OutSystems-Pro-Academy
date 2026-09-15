@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Key, ShieldAlert, CheckCircle2, AlertTriangle, Send } from 'lucide-react';
+import { X, Key, ShieldAlert, CheckCircle2, AlertTriangle, Send, Eye, EyeOff } from 'lucide-react';
 import { Course, UserProfile } from '../types';
 
 interface ActivationCodeModalProps {
@@ -22,6 +22,7 @@ export default function ActivationCodeModal({
   onOpenAuthModal,
 }: ActivationCodeModalProps) {
   const [code, setCode] = useState('');
+  const [showCode, setShowCode] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [attempts, setAttempts] = useState(0);
@@ -165,14 +166,28 @@ export default function ActivationCodeModal({
           {!isLocked ? (
             <div className="space-y-2">
               <label className="text-xs font-semibold text-slate-700">Course Activation Code</label>
-              <input
-                type="text"
-                placeholder="e.g. OUT-REACTIVE-90D-8X9A"
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-xl py-3 px-4 text-sm font-mono font-bold tracking-wider text-slate-900 placeholder-slate-400 outline-none transition-all uppercase"
-                autoFocus
-              />
+              <div className="relative">
+                <input
+                  type={showCode ? 'text' : 'password'}
+                  placeholder="e.g. OSJSZNC3HWTC"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 focus:border-blue-600 focus:bg-white rounded-xl py-3 pl-4 pr-11 text-sm font-mono font-bold tracking-wider text-slate-900 placeholder-slate-400 outline-none transition-all uppercase"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCode(!showCode)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+                  title={showCode ? 'Hide code' : 'Show code'}
+                >
+                  {showCode ? (
+                    <EyeOff className="w-4 h-4 text-slate-500" />
+                  ) : (
+                    <Eye className="w-4 h-4 text-slate-500" />
+                  )}
+                </button>
+              </div>
               <div className="flex justify-between items-center text-[11px] text-slate-400 pt-1">
                 <span>Maximum 5 attempts allowed</span>
                 <span className="font-bold text-slate-600">Failed tries: {attempts}/5</span>
