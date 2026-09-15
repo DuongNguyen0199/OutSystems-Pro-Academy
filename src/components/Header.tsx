@@ -91,10 +91,14 @@ export default function Header({
           {onOpenVouchers && (
             <button
               onClick={onOpenVouchers}
-              className="group flex items-center gap-1.5 bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 hover:from-amber-600 hover:to-red-600 text-white text-[11px] font-bold px-3 py-1.5 rounded-full shadow-xs hover:shadow-md transition-all cursor-pointer"
+              className="group flex items-center gap-1.5 bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 hover:from-amber-600 hover:to-red-600 text-white text-[11px] font-bold px-3 py-1.5 rounded-full shadow-xs hover:shadow-md transition-all cursor-pointer relative"
+              title="Official OutSystems Prometric Exam Vouchers"
             >
               <Gift className="w-3.5 h-3.5 animate-bounce" />
-              <span>Vouchers</span>
+              <span>Prometric Vouchers</span>
+              <span className="bg-white/20 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-full uppercase tracking-tighter">
+                50-100% OFF
+              </span>
             </button>
           )}
 

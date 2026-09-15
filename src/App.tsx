@@ -11,7 +11,7 @@ import AdminDashboard from './components/AdminDashboard';
 import { fallbackCourses } from './data_fallback';
 import { PREPOPULATED_COURSES_DATA } from './prepopulated_courses_data';
 import { Course, UserProfile } from './types';
-import { Search, Mail, AlertCircle, Sparkles, Copy, Check, Youtube } from 'lucide-react';
+import { Search, Mail, AlertCircle, Sparkles, Copy, Check, Youtube, Gift, Ticket } from 'lucide-react';
 
 const prepopulatedList = Object.keys(PREPOPULATED_COURSES_DATA).map(k => ({
   key: k,
@@ -244,6 +244,40 @@ export default function App() {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Prometric Official Voucher Highlight Banner */}
+        <div className={`p-4 sm:p-5 rounded-2xl border transition-all flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm ${
+          theme === 'dark'
+            ? 'bg-gradient-to-r from-slate-900 via-amber-950/30 to-slate-900 border-amber-500/30 text-slate-200'
+            : 'bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border-amber-200 text-slate-900'
+        }`}>
+          <div className="flex items-start sm:items-center gap-3.5 text-center sm:text-left">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center shrink-0 shadow-md">
+              <Ticket className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                <h3 className="font-display font-bold text-sm sm:text-base tracking-tight">
+                  Official OutSystems Prometric Exam Vouchers
+                </h3>
+                <span className="bg-amber-500 text-slate-950 text-[10px] font-black px-2 py-0.5 rounded-full uppercase">
+                  50% - 100% OFF
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-medium">
+                Registering your official certification exam on Prometric? Get 50% to 100% discount vouchers to save big on exam fees!
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => setIsVouchersOpen(true)}
+            className="w-full sm:w-auto shrink-0 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
+          >
+            <Gift className="w-4 h-4" />
+            <span>Get Prometric Voucher</span>
+          </button>
         </div>
 
         {/* Filter / Search Bar */}
