@@ -919,7 +919,7 @@ export default function UdemyMockExam({ course, onClose }: UdemyMockExamProps) {
                 className="bg-[#76b82a] hover:bg-[#68a424] text-white font-bold px-4 py-2 rounded text-xs flex items-center gap-1.5 cursor-pointer shadow-sm transition-all"
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>Thi lại (Random Đề mới)</span>
+                <span>Retake Exam (Randomized)</span>
               </button>
               <button
                 onClick={onClose}
