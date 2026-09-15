@@ -164,7 +164,7 @@ export default function VouchersModal({ onClose }: VouchersModalProps) {
             </div>
             
             <a 
-              href="https://proscheduler.prometric.com/" 
+              href="https://www.outsystems.com/certifications/academy-certifications/?page=0" 
               target="_blank" 
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-[11px] text-amber-400 hover:text-amber-300 font-semibold underline underline-offset-2"
