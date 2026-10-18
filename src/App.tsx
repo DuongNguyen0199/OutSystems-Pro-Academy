@@ -336,6 +336,7 @@ export default function App() {
       {selectedCourseForPayment && (
         <PaymentModal
           course={selectedCourseForPayment}
+          user={user}
           onClose={() => setSelectedCourseForPayment(null)}
         />
       )}

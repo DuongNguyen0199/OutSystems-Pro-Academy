@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { X, Check, Mail, Send, Sparkles, CheckCircle2 } from 'lucide-react';
+import { X, Check, Mail, Send, Sparkles, CheckCircle2, Copy } from 'lucide-react';
 import { Course, UserProfile } from '../types';
+import paypalQrImg from '../assets/images/mypaypal.jpg';
 
 interface PaymentModalProps {
   course: Course;
-  user: UserProfile | null;
+  user?: UserProfile | null;
   onClose: () => void;
 }
 
@@ -13,6 +14,13 @@ export default function PaymentModal({ course, user, onClose }: PaymentModalProp
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [copiedEmail, setCopiedEmail] = useState(false);
+
+  const handleCopyPayPalEmail = () => {
+    navigator.clipboard.writeText('duongrbt@gmail.com');
+    setCopiedEmail(true);
+    setTimeout(() => setCopiedEmail(false), 2000);
+  };
 
   const handleSendPaymentRequest = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,23 +85,47 @@ export default function PaymentModal({ course, user, onClose }: PaymentModalProp
           {!submitted ? (
             <>
               {/* PayPal QR Container */}
-              <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-3xs max-w-[240px] mx-auto text-center flex flex-col items-center">
+              <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-3xs max-w-[260px] mx-auto text-center flex flex-col items-center">
                 <h4 className="font-display font-bold text-base text-slate-900 mb-2">
                   Dương Nguyễn (Admin)
                 </h4>
                 
                 <div className="relative p-2 bg-white rounded-lg border border-slate-150 shadow-3xs flex items-center justify-center overflow-hidden">
                   <img 
-                    src="https://nzwmqifbxbptjgdiwvsd.supabase.co/storage/v1/object/sign/OutSystems%20Practice%20Tests/mypaypal.jpg?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9mNmQwMjM5OS04YjBlLTQxNTctOTBiMS1kOGYzOTIwZjdjZWUiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJPdXRTeXN0ZW1zIFByYWN0aWNlIFRlc3RzL215cGF5cGFsLmpwZyIsInNjb3BlIjoiZG93bmxvYWQiLCJpYXQiOjE3ODM0MzY5MjMsImV4cCI6NDkzNzAzNjkyM30.AyRxzIM01IZDeUvLOQprbSOz_a6nWHM6MntNoEX0czY" 
+                    src={paypalQrImg} 
                     alt="PayPal QR Code for Dương Nguyễn"
                     className="w-36 h-36 sm:w-40 sm:h-40 object-contain rounded-md"
-                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = '/mypaypal.jpg';
+                    }}
                   />
                 </div>
                 
-                <div className="mt-2 flex items-center gap-1 text-[10px] text-slate-600 font-bold bg-slate-50 px-2.5 py-1 rounded-full border border-slate-200">
+                <div className="mt-2.5 flex items-center gap-1.5 text-[10px] text-slate-600 font-bold bg-slate-50 px-2.5 py-1 rounded-full border border-slate-200">
                   <span className="w-1.5 h-1.5 bg-[#0079C1] rounded-full animate-pulse"></span>
                   PayPal QR Code (${course.price})
+                </div>
+
+                <div className="mt-2 w-full pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                  <span className="truncate">duongrbt@gmail.com</span>
+                  <button
+                    type="button"
+                    onClick={handleCopyPayPalEmail}
+                    className="ml-1 px-2 py-0.5 text-[10px] font-bold text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors flex items-center gap-1 cursor-pointer shrink-0"
+                    title="Copy PayPal Email"
+                  >
+                    {copiedEmail ? (
+                      <>
+                        <Check className="w-3 h-3 text-emerald-600" />
+                        <span className="text-emerald-600">Copied</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3 h-3" />
+                        <span>Copy</span>
+                      </>
+                    )}
+                  </button>
                 </div>
               </div>
 
