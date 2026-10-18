@@ -96,7 +96,8 @@ const notificationSettings = {
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || "",
   telegramChatId: process.env.TELEGRAM_CHAT_ID || "",
   emailApiKey: process.env.RESEND_API_KEY || process.env.BREVO_API_KEY || process.env.EMAIL_API_KEY || "",
-  resendApiKey: process.env.RESEND_API_KEY || process.env.EMAIL_API_KEY || ""
+  resendApiKey: process.env.RESEND_API_KEY || process.env.EMAIL_API_KEY || "",
+  paymentQrImage: ""
 };
 
 // Course fetching endpoint (Item 4: Alphabetical A -> Z sorting for all roles)
@@ -1622,6 +1623,7 @@ async function loadNotificationSettingsFromSupabase() {
         if (item.key === 'gmail_app_password') notificationSettings.gmailAppPassword = item.value;
         if (item.key === 'telegram_bot_token') notificationSettings.telegramBotToken = item.value;
         if (item.key === 'telegram_chat_id') notificationSettings.telegramChatId = item.value;
+        if (item.key === 'payment_qr_image') notificationSettings.paymentQrImage = item.value;
         if (item.key === 'email_api_key' || item.key === 'resend_api_key') {
           notificationSettings.emailApiKey = item.value;
           (notificationSettings as any).resendApiKey = item.value;
@@ -1635,6 +1637,17 @@ async function loadNotificationSettingsFromSupabase() {
 
 loadNotificationSettingsFromSupabase();
 
+// Public endpoint to get active Payment QR image for students in PaymentModal
+app.get("/api/payment-qr", async (req, res) => {
+  if (!notificationSettings.paymentQrImage) {
+    await loadNotificationSettingsFromSupabase();
+  }
+  res.json({
+    success: true,
+    qrImageUrl: notificationSettings.paymentQrImage || "/mypaypal.jpg"
+  });
+});
+
 const handleGetSettings = async (req: express.Request, res: express.Response) => {
   await loadNotificationSettingsFromSupabase();
   const apiKey = (notificationSettings as any).resendApiKey || notificationSettings.emailApiKey || "";
@@ -1646,13 +1659,15 @@ const handleGetSettings = async (req: express.Request, res: express.Response) =>
     telegramChatId: notificationSettings.telegramChatId,
     emailApiKey: apiKey,
     resendApiKey: apiKey,
+    paymentQrImage: notificationSettings.paymentQrImage || "",
     settings: {
       adminEmail: notificationSettings.adminEmail,
       gmailAppPassword: notificationSettings.gmailAppPassword,
       telegramBotToken: notificationSettings.telegramBotToken,
       telegramChatId: notificationSettings.telegramChatId,
       emailApiKey: apiKey,
-      resendApiKey: apiKey
+      resendApiKey: apiKey,
+      paymentQrImage: notificationSettings.paymentQrImage || ""
     }
   });
 };
@@ -1662,13 +1677,14 @@ app.get("/api/admin/settings", requireAdminAuth, handleGetSettings);
 
 const handleSaveSettings = async (req: express.Request, res: express.Response) => {
   try {
-    const { adminEmail, gmailAppPassword, telegramBotToken, telegramChatId, emailApiKey, resendApiKey } = req.body;
+    const { adminEmail, gmailAppPassword, telegramBotToken, telegramChatId, emailApiKey, resendApiKey, paymentQrImage } = req.body;
     const finalApiKey = (resendApiKey || emailApiKey || "").trim();
 
     if (adminEmail !== undefined) notificationSettings.adminEmail = (adminEmail || "").trim();
     if (gmailAppPassword !== undefined) notificationSettings.gmailAppPassword = (gmailAppPassword || "").trim();
     if (telegramBotToken !== undefined) notificationSettings.telegramBotToken = (telegramBotToken || "").trim();
     if (telegramChatId !== undefined) notificationSettings.telegramChatId = (telegramChatId || "").trim();
+    if (paymentQrImage !== undefined) notificationSettings.paymentQrImage = (paymentQrImage || "").trim();
     if (finalApiKey) {
       notificationSettings.emailApiKey = finalApiKey;
       (notificationSettings as any).resendApiKey = finalApiKey;
@@ -1681,6 +1697,7 @@ const handleSaveSettings = async (req: express.Request, res: express.Response) =
         { key: "gmail_app_password", value: notificationSettings.gmailAppPassword, updated_at: new Date().toISOString() },
         { key: "telegram_bot_token", value: notificationSettings.telegramBotToken, updated_at: new Date().toISOString() },
         { key: "telegram_chat_id", value: notificationSettings.telegramChatId, updated_at: new Date().toISOString() },
+        { key: "payment_qr_image", value: notificationSettings.paymentQrImage, updated_at: new Date().toISOString() },
         { key: "resend_api_key", value: finalApiKey, updated_at: new Date().toISOString() },
         { key: "email_api_key", value: finalApiKey, updated_at: new Date().toISOString() }
       ];
@@ -1692,7 +1709,8 @@ const handleSaveSettings = async (req: express.Request, res: express.Response) =
 
     res.json({
       success: true,
-      message: "Resend & Notification settings saved successfully to database!"
+      message: "Resend & Notification settings saved successfully to database!",
+      qrImageUrl: notificationSettings.paymentQrImage || "/mypaypal.jpg"
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message || "Failed to save settings." });
@@ -1701,6 +1719,29 @@ const handleSaveSettings = async (req: express.Request, res: express.Response) =
 
 app.post("/api/admin/notification-settings", requireAdminAuth, handleSaveSettings);
 app.post("/api/admin/settings", requireAdminAuth, handleSaveSettings);
+
+// Dedicated Admin Endpoint to Update/Upload Payment QR Image
+app.post("/api/admin/payment-qr", requireAdminAuth, async (req, res) => {
+  try {
+    const { qrImage } = req.body;
+    notificationSettings.paymentQrImage = (qrImage || "").trim();
+
+    const supabase = getSupabase();
+    if (supabase) {
+      await supabase.from("system_settings").upsert([
+        { key: "payment_qr_image", value: notificationSettings.paymentQrImage, updated_at: new Date().toISOString() }
+      ], { onConflict: "key" });
+    }
+
+    res.json({
+      success: true,
+      message: "Đã cập nhật mã QR thanh toán thành công!",
+      qrImageUrl: notificationSettings.paymentQrImage || "/mypaypal.jpg"
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || "Failed to update payment QR." });
+  }
+});
 
 app.post("/api/admin/test-email", requireAdminAuth, async (req, res) => {
   const targetEmail = req.body?.email || notificationSettings.adminEmail || process.env.ADMIN_EMAIL || "duongrbt@gmail.com";

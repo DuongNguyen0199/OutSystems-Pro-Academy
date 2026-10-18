@@ -15,6 +15,20 @@ export default function PaymentModal({ course, user, onClose }: PaymentModalProp
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [copiedEmail, setCopiedEmail] = useState(false);
+  const [paymentQr, setPaymentQr] = useState<string>(paypalQrImg);
+
+  React.useEffect(() => {
+    fetch('/api/payment-qr')
+      .then(res => res.json())
+      .then(data => {
+        if (data?.qrImageUrl) {
+          setPaymentQr(data.qrImageUrl);
+        }
+      })
+      .catch(() => {
+        // Keep paypalQrImg fallback
+      });
+  }, []);
 
   const handleCopyPayPalEmail = () => {
     navigator.clipboard.writeText('duongrbt@gmail.com');
@@ -92,7 +106,7 @@ export default function PaymentModal({ course, user, onClose }: PaymentModalProp
                 
                 <div className="relative p-2 bg-white rounded-lg border border-slate-150 shadow-3xs flex items-center justify-center overflow-hidden">
                   <img 
-                    src={paypalQrImg} 
+                    src={paymentQr} 
                     alt="PayPal QR Code for Dương Nguyễn"
                     className="w-36 h-36 sm:w-40 sm:h-40 object-contain rounded-md"
                     onError={(e) => {

@@ -22,6 +22,7 @@ import {
   ArrowLeft,
   Search,
   CheckCircle2,
+  QrCode,
   Trash2,
   RefreshCw,
   FolderPlus,
@@ -139,6 +140,9 @@ export default function AdminDashboard({
   const [telegramBotToken, setTelegramBotToken] = useState('');
   const [telegramChatId, setTelegramChatId] = useState('');
   const [emailApiKey, setEmailApiKey] = useState('');
+  const [paymentQrImage, setPaymentQrImage] = useState('');
+  const [qrUploading, setQrUploading] = useState(false);
+  const [qrStatusMsg, setQrStatusMsg] = useState('');
   const [notifStatusMsg, setNotifStatusMsg] = useState('');
   const [testingTelegram, setTestingTelegram] = useState(false);
   const [testingEmail, setTestingEmail] = useState(false);
@@ -259,6 +263,7 @@ export default function AdminDashboard({
           if (data.telegramBotToken) setTelegramBotToken(data.telegramBotToken);
           if (data.telegramChatId) setTelegramChatId(data.telegramChatId);
           if (data.emailApiKey) setEmailApiKey(data.emailApiKey);
+          if (data.paymentQrImage) setPaymentQrImage(data.paymentQrImage);
         }
       })
       .catch(() => {});
@@ -521,7 +526,8 @@ export default function AdminDashboard({
           gmailAppPassword: gmailAppPassword,
           telegramBotToken: telegramBotToken,
           telegramChatId: telegramChatId,
-          emailApiKey: emailApiKey
+          emailApiKey: emailApiKey,
+          paymentQrImage: paymentQrImage
         })
       });
 
@@ -529,6 +535,98 @@ export default function AdminDashboard({
       setNotifStatusMsg(data.message || 'Notification settings saved successfully!');
     } catch (err) {
       setNotifStatusMsg('Saved settings to local session.');
+    }
+  };
+
+  const handleQrFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setQrUploading(true);
+    setQrStatusMsg('');
+
+    const reader = new FileReader();
+    reader.onload = (uploadEvent) => {
+      const dataUrl = uploadEvent.target?.result as string;
+      const img = new Image();
+      img.onload = async () => {
+        const canvas = document.createElement('canvas');
+        const maxDim = 800;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(0, 0, width, height);
+          ctx.drawImage(img, 0, 0, width, height);
+        }
+
+        const optimizedBase64 = canvas.toDataURL('image/jpeg', 0.88);
+        setPaymentQrImage(optimizedBase64);
+
+        try {
+          const res = await fetch('/api/admin/payment-qr', {
+            method: 'POST',
+            headers: getAdminHeaders(),
+            body: JSON.stringify({ qrImage: optimizedBase64 })
+          });
+          const data = await res.json();
+          if (data.success) {
+            setQrStatusMsg('Đã lưu và cập nhật mã QR thanh toán thành công!');
+          } else {
+            setQrStatusMsg('Lỗi cập nhật mã QR: ' + (data.error || 'Unknown error'));
+          }
+        } catch (err: any) {
+          setQrStatusMsg('Lỗi lưu mã QR: ' + err.message);
+        } finally {
+          setQrUploading(false);
+        }
+      };
+      img.onerror = () => {
+        setQrUploading(false);
+        setQrStatusMsg('File ảnh không hợp lệ.');
+      };
+      img.src = dataUrl;
+    };
+    reader.onerror = () => {
+      setQrUploading(false);
+      setQrStatusMsg('Không thể đọc file ảnh.');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleResetPaymentQr = async () => {
+    if (!window.confirm('Bạn có chắc chắn muốn đặt lại mã QR thanh toán về mặc định (/mypaypal.jpg)?')) return;
+    setQrUploading(true);
+    setQrStatusMsg('');
+    try {
+      const res = await fetch('/api/admin/payment-qr', {
+        method: 'POST',
+        headers: getAdminHeaders(),
+        body: JSON.stringify({ qrImage: '' })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPaymentQrImage('');
+        setQrStatusMsg('Đã đặt lại mã QR về mặc định thành công!');
+      }
+    } catch (err: any) {
+      setQrStatusMsg('Lỗi đặt lại mã QR: ' + err.message);
+    } finally {
+      setQrUploading(false);
     }
   };
 
@@ -2586,6 +2684,95 @@ export default function AdminDashboard({
                       <Send className="w-3.5 h-3.5 text-blue-400" />
                       <span>{testingTelegram ? 'Sending...' : 'Test Telegram Alert'}</span>
                     </button>
+                  </div>
+                </div>
+
+                {/* PAYMENT QR CODE CONFIGURATION CARD */}
+                <div className="bg-slate-900 p-5 sm:p-6 rounded-2xl border border-slate-700 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                    <div>
+                      <h3 className="font-display font-bold text-base text-white flex items-center gap-2">
+                        <QrCode className="w-5 h-5 text-amber-400" /> Cấu hình & Upload Mã QR Thanh Toán (Payment QR Code)
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Mã QR này sẽ hiển thị trực tiếp cho học viên trong cửa sổ thanh toán (Payment Modal) khi chọn bất kỳ khóa học nào.
+                      </p>
+                    </div>
+                    {paymentQrImage && (
+                      <span className="self-start sm:self-auto bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">
+                        Mã QR Tùy Chỉnh Đang Bật
+                      </span>
+                    )}
+                  </div>
+
+                  {qrStatusMsg && (
+                    <div className="bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-xs p-3 rounded-xl font-semibold flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span>{qrStatusMsg}</span>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+                    {/* QR Preview Column */}
+                    <div className="flex flex-col items-center text-center p-4 bg-slate-950 rounded-xl border border-slate-800">
+                      <span className="text-[11px] font-bold text-slate-400 mb-2 uppercase tracking-wider">
+                        Mã QR Đang Sử Dụng
+                      </span>
+                      <div className="relative p-2.5 bg-white rounded-xl shadow-md border border-slate-200 flex items-center justify-center overflow-hidden">
+                        <img
+                          src={paymentQrImage || '/mypaypal.jpg'}
+                          alt="Payment QR Code Preview"
+                          className="w-36 h-36 object-contain rounded-md"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = '/mypaypal.jpg';
+                          }}
+                        />
+                      </div>
+                      <div className="mt-2 text-[10px] text-slate-500 font-mono font-medium">
+                        {paymentQrImage ? 'Custom QR Code' : 'Default (/mypaypal.jpg)'}
+                      </div>
+                    </div>
+
+                    {/* Upload & Actions Column */}
+                    <div className="md:col-span-2 space-y-3.5">
+                      <div className="border-2 border-dashed border-slate-700 hover:border-amber-500/60 transition-colors rounded-xl p-5 text-center bg-slate-950/50 flex flex-col items-center justify-center gap-2 relative">
+                        <Upload className="w-8 h-8 text-amber-400 animate-pulse" />
+                        <div>
+                          <p className="text-xs font-bold text-slate-200">
+                            Tải lên hình ảnh mã QR mới
+                          </p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            Hỗ trợ định dạng JPG, PNG, WEBP (Hệ thống tự động căn chỉnh & tối ưu hiển thị)
+                          </p>
+                        </div>
+                        <label className="mt-1 inline-flex items-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-bold text-xs px-4 py-2 rounded-xl cursor-pointer shadow-md transition-all">
+                          <Upload className="w-4 h-4" />
+                          <span>{qrUploading ? 'Đang xử lý...' : 'Chọn file ảnh QR...'}</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            disabled={qrUploading}
+                            onChange={handleQrFileUpload}
+                          />
+                        </label>
+                      </div>
+
+                      <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                        <p className="text-[11px] text-slate-400 leading-relaxed max-w-sm">
+                          💡 Sau khi chọn file ảnh, mã QR sẽ tự động được cập nhật ngay lập tức lên hệ thống.
+                        </p>
+                        {paymentQrImage && (
+                          <button
+                            type="button"
+                            onClick={handleResetPaymentQr}
+                            className="text-xs text-rose-400 hover:text-rose-300 font-semibold underline underline-offset-4 cursor-pointer transition-colors"
+                          >
+                            Đặt lại mã QR mặc định
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
