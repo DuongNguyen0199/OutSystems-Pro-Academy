@@ -2474,12 +2474,12 @@ export default function AdminDashboard({
           </div>
         )}
 
-        {/* TAB 5: GMAIL & TELEGRAM NOTIFICATION ALERTS */}
+        {/* TAB 5: RESEND & TELEGRAM NOTIFICATION ALERTS */}
         {activeTab === 'notifications' && (
           <div className="space-y-6">
             <h2 className="font-display font-extrabold text-xl text-white flex items-center gap-2.5">
               <BellRing className="w-6 h-6 text-amber-400" />
-              Dual Notification Alerts (Gmail SMTP & Telegram Bot)
+              Notification Alerts (Resend API & Telegram Bot)
             </h2>
 
             <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 space-y-6">
@@ -2491,37 +2491,37 @@ export default function AdminDashboard({
 
               <form onSubmit={handleSaveNotificationSettings} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Universal Email Dispatcher Settings */}
+                  {/* Resend Email Dispatcher Settings */}
                   <div className="bg-slate-900 p-5 rounded-2xl border border-slate-700 space-y-4">
                     <div className="flex items-center justify-between">
                       <h3 className="font-display font-bold text-sm text-white flex items-center gap-2">
-                        <Mail className="w-4 h-4 text-emerald-400" /> Email Dispatcher Service
+                        <Mail className="w-4 h-4 text-emerald-400" /> Resend API Email Service
                       </h3>
                       <span className="bg-emerald-950 text-emerald-300 border border-emerald-800 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full">
-                        HTTPS Port 443 / SMTP
+                        HTTPS Port 443 (Render 100% OK)
                       </span>
                     </div>
 
                     <div className="space-y-1.5">
                       <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
-                        <span>Brevo API Key (Khuyên dùng trên Cloud Render)</span>
-                        <a href="https://app.brevo.com/settings/keys/api" target="_blank" rel="noreferrer" className="text-[10px] text-emerald-400 underline font-bold">
-                          Lấy API Key Brevo Miễn Phí ↗
+                        <span>Resend API Key (Bắt đầu bằng re_...)</span>
+                        <a href="https://resend.com/api-keys" target="_blank" rel="noreferrer" className="text-[10px] text-emerald-400 underline font-bold">
+                          Lấy Resend API Key Miễn Phí ↗
                         </a>
                       </label>
                       <input
                         type="password"
                         value={emailApiKey}
                         onChange={(e) => setEmailApiKey(e.target.value)}
-                        placeholder="e.g. xkeysib-..."
+                        placeholder="e.g. re_123456789_abcdef..."
                         className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-emerald-400 font-mono outline-none focus:border-emerald-500 font-bold"
                       />
                     </div>
 
                     <div className="space-y-1.5">
                       <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
-                        <span>Admin Email Address (Sender / Recipient)</span>
-                        <span className="text-[10px] text-slate-500">Email Admin gửi mã cho học viên</span>
+                        <span>Admin Email Address (Sender & Reply-To)</span>
+                        <span className="text-[10px] text-slate-500">Nhận phản hồi từ học viên</span>
                       </label>
                       <input
                         type="email"
@@ -2533,26 +2533,11 @@ export default function AdminDashboard({
                       />
                     </div>
 
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
-                        <span>Gmail App Password (Mật khẩu ứng dụng 16 ký tự)</span>
-                        <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer" className="text-[10px] text-amber-400 underline font-bold">
-                          Google App Pass ↗
-                        </a>
-                      </label>
-                      <input
-                        type="password"
-                        value={gmailAppPassword}
-                        onChange={(e) => setGmailAppPassword(e.target.value)}
-                        placeholder="e.g. abcd efgh ijkl mnop (16 ký tự)"
-                        className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-amber-300 font-mono outline-none focus:border-amber-500 font-bold"
-                      />
-                    </div>
-
                     <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 text-[11px] text-slate-400 leading-relaxed space-y-1.5">
-                      <p className="font-bold text-slate-200">💡 Giải thích nguyên nhân Connection Timeout & Khắc phục 100%:</p>
-                      <p>• <strong className="text-rose-300">Tường lửa Render chặn cổng SMTP 587:</strong> Máy chủ Render Cloud tự động chặn các cổng TCP SMTP (587, 465) dẫn đến báo lỗi <em>Connection timeout</em> khi kết nối trực tiếp `smtp.gmail.com`.</p>
-                      <p>• <strong className="text-emerald-300">Giải pháp Brevo (xkeysib-...):</strong> Tạo API Key miễn phí tại <a href="https://app.brevo.com/settings/keys/api" target="_blank" rel="noreferrer" className="underline text-emerald-400">brevo.com</a> và dán vào ô trên. Brevo gửi qua Port 443 HTTPS **chạy 100% trên Render, không bị chặn và không cần domain**!</p>
+                      <p className="font-bold text-slate-200">🚀 Vì sao chuyển sang Resend (Port 443 HTTPS)?</p>
+                      <p>• <strong className="text-emerald-300">Không bị Render chặn:</strong> Resend gửi qua REST API HTTPS cổng 443, hoạt động 100% trơn tru trên Render Cloud, không bị lỗi <em>Connection Timeout</em> như cổng SMTP 587 của Gmail.</p>
+                      <p>• <strong className="text-sky-300">Miễn phí 3.000 email/tháng:</strong> Đăng ký tài khoản miễn phí tại <a href="https://resend.com" target="_blank" rel="noreferrer" className="underline text-sky-400">resend.com</a> và lấy API Key dán vào ô trên.</p>
+                      <p>• <strong className="text-amber-300">Tự động Reply-To:</strong> Khi gửi mã kích hoạt, Resend tự động đặt Reply-To về <code>{adminEmailSetting || 'duongrbt@gmail.com'}</code> để học viên trả lời thẳng về Gmail của bạn.</p>
                     </div>
 
                     <button
@@ -2562,7 +2547,7 @@ export default function AdminDashboard({
                       className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-2.5 rounded-xl cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg transition-all"
                     >
                       <Send className="w-3.5 h-3.5" />
-                      <span>{testingEmail ? 'Sending...' : 'Test Email Dispatcher'}</span>
+                      <span>{testingEmail ? 'Sending...' : 'Test Gửi Mail Qua Resend'}</span>
                     </button>
                   </div>
 

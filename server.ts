@@ -1322,16 +1322,47 @@ async function sendTelegramAlert(message: string): Promise<boolean> {
   }
 }
 
-// Helper: Universal Email Sender (Brevo HTTPS API -> Gmail SMTP -> Resend API)
+// Helper: Universal Email Sender (Resend HTTPS API -> Brevo -> Gmail SMTP)
 async function sendCustomEmail(toEmail: string, subject: string, htmlContent: string): Promise<{ success: boolean; error?: string }> {
   const senderEmail = (notificationSettings.adminEmail || process.env.ADMIN_EMAIL || "duongrbt@gmail.com").trim();
-  const gmailPass = (notificationSettings.gmailAppPassword || process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASSWORD || "").replace(/\s+/g, "");
   const apiKey = (notificationSettings.resendApiKey || notificationSettings.emailApiKey || process.env.RESEND_API_KEY || process.env.BREVO_API_KEY || "").trim();
+  const gmailPass = (notificationSettings.gmailAppPassword || process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASSWORD || "").replace(/\s+/g, "");
 
   let lastError = "";
 
-  // 1. BREVO REST API (xkeysib-...) - PORT 443 HTTPS (No Domain Verification Required & Never Blocked by Render Firewall!)
-  if (apiKey.startsWith("xkeysib-")) {
+  // 1. RESEND REST API (re_...) - PRIMARY DISPATCHER (PORT 443 HTTPS - Never blocked by Render firewall!)
+  if (apiKey && !apiKey.startsWith("xkeysib-")) {
+    try {
+      let fromAddress = process.env.RESEND_FROM || "OutSystems Pro Academy <onboarding@resend.dev>";
+      if (senderEmail && !senderEmail.endsWith("@gmail.com") && !senderEmail.endsWith("@yahoo.com") && !senderEmail.endsWith("@hotmail.com") && !senderEmail.endsWith("@outlook.com")) {
+        fromAddress = `OutSystems Pro Academy <${senderEmail}>`;
+      }
+
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          from: fromAddress,
+          to: [toEmail],
+          reply_to: senderEmail,
+          subject: subject,
+          html: htmlContent
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.id) return { success: true };
+      lastError = `Lỗi Resend API: ${data.message || JSON.stringify(data)}`;
+    } catch (e: any) {
+      lastError = `Không thể kết nối tới Resend API: ${e.message}`;
+    }
+  }
+
+  // 2. BREVO REST API (xkeysib-...) - FALLBACK DISPATCHER (PORT 443 HTTPS)
+  if (apiKey && apiKey.startsWith("xkeysib-")) {
     try {
       const res = await fetch("https://api.brevo.com/v3/smtp/email", {
         method: "POST",
@@ -1342,6 +1373,7 @@ async function sendCustomEmail(toEmail: string, subject: string, htmlContent: st
         body: JSON.stringify({
           sender: { name: "OutSystems Pro Academy", email: senderEmail },
           to: [{ email: toEmail }],
+          replyTo: { email: senderEmail, name: "OutSystems Pro Academy" },
           subject: subject,
           htmlContent: htmlContent
         })
@@ -1355,8 +1387,8 @@ async function sendCustomEmail(toEmail: string, subject: string, htmlContent: st
     }
   }
 
-  // 2. GMAIL SMTP (Port 587)
-  if (gmailPass) {
+  // 3. GMAIL SMTP (Port 587 - Fallback only if no Resend key provided)
+  if (!apiKey && gmailPass) {
     try {
       let ipv4Host = "smtp.gmail.com";
       try {
@@ -1371,12 +1403,13 @@ async function sendCustomEmail(toEmail: string, subject: string, htmlContent: st
         secure: false,
         tls: { servername: "smtp.gmail.com", rejectUnauthorized: false },
         auth: { user: senderEmail, pass: gmailPass },
-        connectionTimeout: 7000
+        connectionTimeout: 5000
       });
 
       await transporter.sendMail({
         from: `"OutSystems Pro Academy" <${senderEmail}>`,
         to: toEmail,
+        replyTo: senderEmail,
         subject: subject,
         html: htmlContent
       });
@@ -1384,37 +1417,7 @@ async function sendCustomEmail(toEmail: string, subject: string, htmlContent: st
       return { success: true };
     } catch (smtpErr: any) {
       console.warn("Gmail SMTP note:", smtpErr.message);
-      lastError = `⚠️ Gmail SMTP bị ngắt kết nối (Connection timeout do tường lửa Render chặn cổng 587). Bạn nên dùng Brevo API Key (xkeysib-...) để gửi mail qua Port 443 HTTPS siêu tốc!`;
-    }
-  }
-
-  // 3. RESEND REST API (re_...) DISPATCHER - PORT 443 HTTPS
-  if (apiKey && !apiKey.startsWith("xkeysib-")) {
-    try {
-      let fromAddress = "OutSystems Pro Academy <onboarding@resend.dev>";
-      if (senderEmail && !senderEmail.endsWith("@gmail.com") && !senderEmail.endsWith("@yahoo.com") && !senderEmail.endsWith("@hotmail.com")) {
-        fromAddress = `OutSystems Pro Academy <${senderEmail}>`;
-      }
-
-      let res = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          from: fromAddress,
-          to: [toEmail],
-          subject: subject,
-          html: htmlContent
-        })
-      });
-
-      let data = await res.json();
-      if (res.ok && data.id) return { success: true };
-      lastError = `Lỗi Resend API: ${data.message || JSON.stringify(data)}`;
-    } catch (e: any) {
-      lastError = `Không thể kết nối tới Resend API: ${e.message}`;
+      lastError = `⚠️ Gmail SMTP bị ngắt kết nối (Tường lửa Render chặn cổng 587). Vui lòng dùng Resend API Key (re_...) để gửi qua cổng 443 HTTPS siêu tốc!`;
     }
   }
 
@@ -1424,7 +1427,7 @@ async function sendCustomEmail(toEmail: string, subject: string, htmlContent: st
 
   return {
     success: false,
-    error: "Chưa cấu hình tài khoản gửi mail. Vui lòng nhập Brevo API Key (xkeysib-...) hoặc Gmail App Password trong tab Alerts & API!"
+    error: "Chưa cấu hình Resend API Key. Vui lòng nhập Resend API Key (re_...) trong Admin Dashboard tab Alerts & API hoặc biến môi trường RESEND_API_KEY trên Render!"
   };
 }
 
