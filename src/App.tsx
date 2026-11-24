@@ -11,7 +11,7 @@ import AdminDashboard from './components/AdminDashboard';
 import { fallbackCourses } from './data_fallback';
 import { PREPOPULATED_COURSES_DATA } from './prepopulated_courses_data';
 import { Course, UserProfile } from './types';
-import { Search, Mail, AlertCircle, Sparkles, Copy, Check, Youtube, Gift, Ticket } from 'lucide-react';
+import { Search, Mail, AlertCircle, Sparkles, Copy, Check, Youtube, Gift, Ticket, BookOpen } from 'lucide-react';
 
 const prepopulatedList = Object.keys(PREPOPULATED_COURSES_DATA).map(k => ({
   key: k,
@@ -308,6 +308,14 @@ export default function App() {
             {[1, 2, 3, 4].map((n) => (
               <CourseCardSkeleton key={n} theme={theme} />
             ))}
+          </div>
+        ) : filteredCourses.length === 0 ? (
+          <div className="bg-slate-900/50 border border-slate-800 rounded-3xl p-12 text-center space-y-3">
+            <BookOpen className="w-12 h-12 text-slate-600 mx-auto" />
+            <h3 className="font-display font-bold text-lg text-slate-200">No Courses in Database</h3>
+            <p className="text-xs text-slate-400 max-w-md mx-auto">
+              Cơ sở dữ liệu Supabase hiện tại không có khóa học nào. Bạn có thể đăng nhập tài khoản Admin và vào Admin Panel để thêm hoặc import khóa học mới.
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-6 animate-in fade-in duration-300">
