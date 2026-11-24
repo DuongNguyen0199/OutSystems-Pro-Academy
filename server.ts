@@ -174,13 +174,8 @@ app.get("/api/courses", async (req, res) => {
       // DO NOT auto-resurrect questions with prepopulated dataset if Supabase is connected!
       // Strictly respect what is in Supabase database!
       if (!isSupabaseConnected) {
-        const prepopulated = getPrepopulatedForCourse(item.title || (fallback ? fallback.title : ''));
-        const setQuestionsCount = Array.isArray(sets) ? sets.reduce((sum: number, s: any) => sum + (s.questions ? s.questions.length : 0), 0) : 0;
-
-        if (!sets || !Array.isArray(sets) || sets.length === 0 || setQuestionsCount === 0) {
-          if (prepopulated && prepopulated.examSets && prepopulated.examSets.length > 0) {
-            sets = prepopulated.examSets;
-          } else if (fallback && fallback.examSets && fallback.examSets.length > 0) {
+        if (!sets || !Array.isArray(sets) || sets.length === 0) {
+          if (fallback && fallback.examSets && fallback.examSets.length > 0) {
             sets = fallback.examSets;
           }
         }
@@ -191,15 +186,8 @@ app.get("/api/courses", async (req, res) => {
         const allSetQuestions = Array.isArray(sets) ? sets.flatMap((s: any) => s.questions || []) : [];
         if (allSetQuestions.length > 0) {
           mockExam = allSetQuestions;
-        } else if (!isSupabaseConnected) {
-          const prepopulated = getPrepopulatedForCourse(item.title || (fallback ? fallback.title : ''));
-          if (prepopulated && prepopulated.mockExam && prepopulated.mockExam.length > 0) {
-            mockExam = prepopulated.mockExam;
-          } else if (fallback && fallback.mockExam && fallback.mockExam.length > 0) {
-            mockExam = fallback.mockExam;
-          } else {
-            mockExam = [];
-          }
+        } else if (!isSupabaseConnected && fallback && fallback.mockExam && fallback.mockExam.length > 0) {
+          mockExam = fallback.mockExam;
         } else {
           mockExam = [];
         }
@@ -1233,6 +1221,236 @@ app.post("/api/admin/questions/bulk-replace-course", requireAdminAuth, async (re
   } catch (err: any) {
     console.error("Bulk replace error:", err);
     res.status(500).json({ success: false, error: err.message || "Failed to bulk replace questions." });
+  }
+});
+
+// BULK DELETE QUESTIONS ENDPOINT (Role: Admin ONLY)
+// Supports modes: 'selected', 'set', 'course', 'all_courses'
+// IMPORTANT: ONLY deletes questions/sets, NEVER deletes course records!
+app.post("/api/admin/questions/bulk-delete", requireAdminAuth, async (req, res) => {
+  try {
+    const { mode, courseId, setId, questionIds } = req.body;
+    const supabase = getSupabase();
+
+    // MODE 1: Delete all questions across ALL courses (Global question wipe)
+    if (mode === "all_courses") {
+      // 1. Wipe in-memory caches
+      inMemoryCourseQuestions = {};
+      inMemoryCourseExamSets = {};
+      fallbackCourses.forEach((c) => {
+        c.mockExam = [];
+        c.examSets = [];
+      });
+
+      // 2. Wipe Supabase data
+      if (supabase) {
+        try {
+          await supabase.from("courses").update({ exam_sets: [], mock_exam: [] }).neq("id", "00000000-0000-0000-0000-000000000000");
+        } catch (e1) {
+          try {
+            await supabase.from("courses").update({ mock_exam: [] }).neq("id", "00000000-0000-0000-0000-000000000000");
+          } catch (e2) {}
+        }
+
+        try {
+          await supabase.from("question_options").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+          await supabase.from("exam_questions").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+        } catch (e3) {}
+      }
+
+      return res.json({
+        success: true,
+        message: "Đã xóa sạch toàn bộ câu hỏi của tất cả các khóa học! (Các khóa học vẫn được giữ nguyên vẹn)."
+      });
+    }
+
+    // MODE 2: Delete all questions for a specific course
+    if (mode === "course") {
+      if (!courseId) {
+        return res.status(400).json({ success: false, error: "Thiếu courseId." });
+      }
+      const targetUuid = resolveCourseUuid(courseId);
+
+      // Wipe from in-memory caches
+      delete inMemoryCourseQuestions[courseId];
+      delete inMemoryCourseQuestions[targetUuid];
+      delete inMemoryCourseExamSets[courseId];
+      delete inMemoryCourseExamSets[targetUuid];
+
+      const fIdx = fallbackCourses.findIndex((f) => f.id === courseId || f.id === targetUuid);
+      if (fIdx !== -1) {
+        fallbackCourses[fIdx].mockExam = [];
+        fallbackCourses[fIdx].examSets = [];
+      }
+
+      // Wipe from Supabase
+      if (supabase) {
+        try {
+          await supabase.from("courses").update({ exam_sets: [], mock_exam: [] }).eq("id", targetUuid);
+        } catch (e1) {
+          try {
+            await supabase.from("courses").update({ mock_exam: [] }).eq("id", targetUuid);
+          } catch (e2) {}
+        }
+
+        if (targetUuid !== courseId) {
+          try {
+            await supabase.from("courses").update({ exam_sets: [], mock_exam: [] }).eq("id", courseId);
+          } catch (e3) {
+            try {
+              await supabase.from("courses").update({ mock_exam: [] }).eq("id", courseId);
+            } catch (e4) {}
+          }
+        }
+
+        // Delete from 3NF tables
+        try {
+          const hex = targetUuid.replace(/-/g, '');
+          const examId = `${hex.substring(0, 8)}-${hex.substring(8, 12)}-4${hex.substring(13, 16)}-a${hex.substring(17, 20)}-${hex.substring(20, 32)}`;
+          const { data: existingQs } = await supabase.from("exam_questions").select("id").eq("exam_id", examId);
+          if (existingQs && existingQs.length > 0) {
+            const qIds = existingQs.map((q: any) => q.id);
+            await supabase.from("question_options").delete().in("question_id", qIds);
+            await supabase.from("exam_questions").delete().eq("exam_id", examId);
+          }
+        } catch (e5) {}
+      }
+
+      return res.json({
+        success: true,
+        message: "Đã xóa toàn bộ câu hỏi của khóa học thành công! (Khóa học vẫn được giữ nguyên)."
+      });
+    }
+
+    // MODE 3: Clear all questions in a specific exam set
+    if (mode === "set") {
+      if (!courseId || !setId) {
+        return res.status(400).json({ success: false, error: "Thiếu courseId hoặc setId." });
+      }
+      const targetUuid = resolveCourseUuid(courseId);
+
+      let sets = inMemoryCourseExamSets[courseId] || inMemoryCourseExamSets[targetUuid];
+      const fIdx = fallbackCourses.findIndex((f) => f.id === courseId || f.id === targetUuid);
+      if (!sets && fIdx !== -1 && fallbackCourses[fIdx].examSets) {
+        sets = fallbackCourses[fIdx].examSets;
+      }
+
+      let deletedCount = 0;
+      if (Array.isArray(sets)) {
+        sets = sets.map((s: any) => {
+          if (s.id === setId) {
+            deletedCount = (s.questions || []).length;
+            return { ...s, questions: [] };
+          }
+          return s;
+        });
+      } else {
+        sets = [];
+      }
+
+      const allQs = Array.isArray(sets) ? sets.flatMap((s: any) => s.questions || []) : [];
+      inMemoryCourseExamSets[courseId] = sets;
+      inMemoryCourseExamSets[targetUuid] = sets;
+      inMemoryCourseQuestions[courseId] = allQs;
+      inMemoryCourseQuestions[targetUuid] = allQs;
+
+      if (fIdx !== -1) {
+        fallbackCourses[fIdx].examSets = sets;
+        fallbackCourses[fIdx].mockExam = allQs;
+      }
+
+      if (supabase) {
+        try {
+          await supabase.from("courses").update({ exam_sets: sets, mock_exam: allQs }).eq("id", targetUuid);
+        } catch (e1) {
+          try {
+            await supabase.from("courses").update({ mock_exam: allQs }).eq("id", targetUuid);
+          } catch (e2) {}
+        }
+      }
+
+      return res.json({
+        success: true,
+        message: `Đã xóa sạch ${deletedCount} câu hỏi trong bộ đề "${setId}"!`,
+        remainingCount: allQs.length
+      });
+    }
+
+    // MODE 4: Delete selected questions by IDs
+    if (mode === "selected") {
+      if (!courseId || !Array.isArray(questionIds) || questionIds.length === 0) {
+        return res.status(400).json({ success: false, error: "Thiếu courseId hoặc danh sách câu hỏi cần xóa." });
+      }
+      const targetUuid = resolveCourseUuid(courseId);
+
+      let sets = inMemoryCourseExamSets[courseId] || inMemoryCourseExamSets[targetUuid];
+      const fIdx = fallbackCourses.findIndex((f) => f.id === courseId || f.id === targetUuid);
+      if (!sets && fIdx !== -1 && fallbackCourses[fIdx].examSets) {
+        sets = fallbackCourses[fIdx].examSets;
+      }
+
+      const idSet = new Set(questionIds.map(String));
+
+      if (Array.isArray(sets)) {
+        sets = sets.map((s: any) => {
+          if (!setId || s.id === setId) {
+            return {
+              ...s,
+              questions: (s.questions || []).filter((q: any) => !idSet.has(String(q.id)))
+            };
+          }
+          return s;
+        });
+      } else {
+        sets = [];
+      }
+
+      let allQs = inMemoryCourseQuestions[courseId] || inMemoryCourseQuestions[targetUuid];
+      if (!allQs && fIdx !== -1 && fallbackCourses[fIdx].mockExam) {
+        allQs = fallbackCourses[fIdx].mockExam;
+      }
+      if (Array.isArray(allQs)) {
+        allQs = allQs.filter((q: any) => !idSet.has(String(q.id)));
+      } else {
+        allQs = Array.isArray(sets) ? sets.flatMap((s: any) => s.questions || []) : [];
+      }
+
+      inMemoryCourseExamSets[courseId] = sets;
+      inMemoryCourseExamSets[targetUuid] = sets;
+      inMemoryCourseQuestions[courseId] = allQs;
+      inMemoryCourseQuestions[targetUuid] = allQs;
+
+      if (fIdx !== -1) {
+        fallbackCourses[fIdx].examSets = sets;
+        fallbackCourses[fIdx].mockExam = allQs;
+      }
+
+      if (supabase) {
+        try {
+          await supabase.from("courses").update({ exam_sets: sets, mock_exam: allQs }).eq("id", targetUuid);
+        } catch (e1) {
+          try {
+            await supabase.from("courses").update({ mock_exam: allQs }).eq("id", targetUuid);
+          } catch (e2) {}
+        }
+
+        try {
+          await supabase.from("question_options").delete().in("question_id", questionIds);
+          await supabase.from("exam_questions").delete().in("id", questionIds);
+        } catch (e3) {}
+      }
+
+      return res.json({
+        success: true,
+        message: `Đã xóa thành công ${questionIds.length} câu hỏi đã chọn!`,
+        remainingCount: allQs.length
+      });
+    }
+
+    return res.status(400).json({ success: false, error: "Chế độ (mode) không hợp lệ." });
+  } catch (err: any) {
+    console.error("Bulk delete questions error:", err);
+    res.status(500).json({ success: false, error: err.message || "Lỗi khi xóa hàng loạt câu hỏi." });
   }
 });
 

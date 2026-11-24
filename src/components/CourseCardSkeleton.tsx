@@ -2,6 +2,7 @@ import React from 'react';
 
 interface CourseCardSkeletonProps {
   theme?: 'light' | 'dark';
+  key?: React.Key;
 }
 
 export default function CourseCardSkeleton({ theme = 'light' }: CourseCardSkeletonProps) {

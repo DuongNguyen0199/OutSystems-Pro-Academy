@@ -134,6 +134,22 @@ export default function AdminDashboard({
   const [csvMessage, setCsvMessage] = useState('');
   const csvFileInputRef = useRef<HTMLInputElement>(null);
 
+  // Bulk Delete Questions State (Question Only, Never Course)
+  const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([]);
+  const [isBulkDeleting, setIsBulkDeleting] = useState<boolean>(false);
+  const [bulkDeleteSuccessMsg, setBulkDeleteSuccessMsg] = useState<string>('');
+  const [confirmDeleteModal, setConfirmDeleteModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: string;
+    mode: 'selected' | 'set' | 'course' | 'all_courses';
+    courseId?: string;
+    setId?: string;
+    questionIds?: string[];
+    requireInput?: boolean;
+  }>({ isOpen: false, title: '', description: '', mode: 'selected' });
+  const [deleteConfirmInput, setDeleteConfirmInput] = useState<string>('');
+
   // Notification Settings State
   const [adminEmailSetting, setAdminEmailSetting] = useState('');
   const [gmailAppPassword, setGmailAppPassword] = useState('');
@@ -153,6 +169,7 @@ export default function AdminDashboard({
   const [editCodeStr, setEditCodeStr] = useState('');
   const [editCodeEmail, setEditCodeEmail] = useState('');
   const [editCodeCourseId, setEditCodeCourseId] = useState('');
+  const [editCodeStatus, setEditCodeStatus] = useState<'active' | 'used' | 'revoked'>('active');
   const [codeSearchQuery, setCodeSearchQuery] = useState('');
   const [sendingMailCodeId, setSendingMailCodeId] = useState<string | null>(null);
 
@@ -1350,21 +1367,136 @@ export default function AdminDashboard({
     handleSaveAllQuestionsToSupabase(allQuestions);
   };
 
-  const handleDeleteQuestion = (id: string) => {
-    if (!confirm('Are you sure you want to delete this question?')) return;
-    let finalMockQuestions: MockExamQuestion[] = [];
-    const updatedCourses = courses.map((c) => {
-      if (c.id === selectedCourseId) {
-        finalMockQuestions = (c.mockExam || []).filter((q) => q.id !== id);
-        return {
-          ...c,
-          mockExam: finalMockQuestions
-        };
+  // BULK DELETE QUESTIONS HANDLER (Course, Set, Selected, All Courses)
+  // Deletes questions ONLY, preserves course details!
+  const executeBulkDelete = async (
+    mode: 'selected' | 'set' | 'course' | 'all_courses',
+    targetCourseId?: string,
+    targetSetId?: string,
+    targetQuestionIds?: string[]
+  ) => {
+    const cId = targetCourseId || selectedCourseId;
+    const qIds = targetQuestionIds || selectedQuestionIds;
+    const sId = targetSetId || selectedSetId || undefined;
+
+    setIsBulkDeleting(true);
+    setBulkDeleteSuccessMsg('');
+
+    try {
+      const res = await fetch('/api/admin/questions/bulk-delete', {
+        method: 'POST',
+        headers: getAdminHeaders(),
+        body: JSON.stringify({
+          mode,
+          courseId: cId,
+          setId: sId,
+          questionIds: qIds
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        alert(`❌ Lỗi xóa câu hỏi: ${data.error || 'Server error'}`);
+        return;
       }
-      return c;
-    });
-    onUpdateCourses(updatedCourses);
-    handleSaveAllQuestionsToSupabase(finalMockQuestions);
+
+      // Update Frontend Courses State immediately
+      let updatedCourses = [...courses];
+
+      if (mode === 'all_courses') {
+        updatedCourses = courses.map((c) => ({
+          ...c,
+          mockExam: [],
+          examSets: []
+        }));
+        setSelectedQuestionIds([]);
+      } else if (mode === 'course') {
+        updatedCourses = courses.map((c) => {
+          if (c.id === cId) {
+            return {
+              ...c,
+              mockExam: [],
+              examSets: []
+            };
+          }
+          return c;
+        });
+        setSelectedQuestionIds([]);
+      } else if (mode === 'set') {
+        updatedCourses = courses.map((c) => {
+          if (c.id === cId) {
+            const currentSets = getCourseExamSets(c);
+            const nextSets = currentSets.map((s) => (s.id === sId ? { ...s, questions: [] } : s));
+            const nextMock = nextSets.flatMap((s) => s.questions || []);
+            return {
+              ...c,
+              examSets: nextSets,
+              mockExam: nextMock
+            };
+          }
+          return c;
+        });
+        setSelectedQuestionIds([]);
+      } else if (mode === 'selected') {
+        const idSet = new Set(qIds.map(String));
+        updatedCourses = courses.map((c) => {
+          if (c.id === cId) {
+            const currentSets = getCourseExamSets(c);
+            const nextSets = currentSets.map((s) => {
+              if (!sId || s.id === sId) {
+                return {
+                  ...s,
+                  questions: (s.questions || []).filter((q) => !idSet.has(String(q.id)))
+                };
+              }
+              return s;
+            });
+            const nextMock = (c.mockExam || []).filter((q) => !idSet.has(String(q.id)));
+            return {
+              ...c,
+              examSets: nextSets,
+              mockExam: nextMock
+            };
+          }
+          return c;
+        });
+        setSelectedQuestionIds((prev) => prev.filter((id) => !idSet.has(id)));
+      }
+
+      onUpdateCourses(updatedCourses);
+      try {
+        localStorage.setItem('outsystems_courses_cache', JSON.stringify(updatedCourses));
+      } catch (e) {}
+
+      setBulkDeleteSuccessMsg(`✅ ${data.message}`);
+      setConfirmDeleteModal({ isOpen: false, title: '', description: '', mode: 'selected' });
+      setDeleteConfirmInput('');
+    } catch (err: any) {
+      alert(`❌ Lỗi kết nối: ${err.message || 'Network error'}`);
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
+
+  const toggleSelectQuestion = (qId: string) => {
+    setSelectedQuestionIds((prev) =>
+      prev.includes(qId) ? prev.filter((id) => id !== qId) : [...prev, qId]
+    );
+  };
+
+  const toggleSelectAllQuestionsInSet = (setQuestions: MockExamQuestion[]) => {
+    const allIds = setQuestions.map((q) => q.id);
+    const areAllSelected = allIds.length > 0 && allIds.every((id) => selectedQuestionIds.includes(id));
+    if (areAllSelected) {
+      setSelectedQuestionIds((prev) => prev.filter((id) => !allIds.includes(id)));
+    } else {
+      setSelectedQuestionIds((prev) => Array.from(new Set([...prev, ...allIds])));
+    }
+  };
+
+  const handleDeleteQuestion = async (id: string) => {
+    if (!confirm('Bạn có chắc chắn muốn xóa câu hỏi này? (Khóa học vẫn giữ nguyên)')) return;
+    await executeBulkDelete('selected', selectedCourseId, selectedSetId || undefined, [id]);
   };
 
   // SAVE ALL QUESTIONS TO SUPABASE DATABASE
@@ -2263,21 +2395,76 @@ export default function AdminDashboard({
                 </p>
               </div>
 
-              <select
-                value={selectedCourseId}
-                onChange={(e) => {
-                  setSelectedCourseId(e.target.value);
-                  setSelectedSetId(null);
-                }}
-                className="bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white font-bold outline-none focus:border-blue-500 cursor-pointer"
-              >
-                {courses.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.title} ({getCourseExamSets(c).length} Bộ đề)
-                  </option>
-                ))}
-              </select>
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={selectedCourseId}
+                  onChange={(e) => {
+                    setSelectedCourseId(e.target.value);
+                    setSelectedSetId(null);
+                    setSelectedQuestionIds([]);
+                  }}
+                  className="bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white font-bold outline-none focus:border-blue-500 cursor-pointer"
+                >
+                  {courses.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.title} ({getCourseExamSets(c).length} Bộ đề, {c.mockExam?.length || 0} câu)
+                    </option>
+                  ))}
+                </select>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfirmDeleteModal({
+                      isOpen: true,
+                      title: 'Xóa toàn bộ câu hỏi của khóa học này?',
+                      description: `Bạn có chắc chắn muốn xóa TOÀN BỘ câu hỏi của khóa học "${selectedCourse?.title}"? (Bao gồm tất cả các bộ đề thi và ngân hàng câu hỏi). LƯU Ý: Khóa học, giá bán, ảnh bìa và cấu hình khóa học vẫn được GIỮ NGUYÊN HOÀN TOÀN.`,
+                      mode: 'course',
+                      courseId: selectedCourseId
+                    });
+                  }}
+                  className="bg-red-950/70 hover:bg-red-900 border border-red-700/80 text-red-300 text-xs font-bold px-3 py-2.5 rounded-xl flex items-center gap-1.5 cursor-pointer transition-all shadow-md"
+                  title="Xóa toàn bộ câu hỏi của khóa này (giữ nguyên khóa học)"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                  <span>Xóa câu hỏi khóa này</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfirmDeleteModal({
+                      isOpen: true,
+                      title: '⚠️ CẢNH BÁO: Xóa câu hỏi TẤT CẢ các khóa học?',
+                      description: 'Thao tác này sẽ xóa sạch toàn bộ câu hỏi của TẤT CẢ 12 khóa học trong hệ thống để bạn có thể import bộ đề mới từ đầu. Toàn bộ 12 khóa học (tiêu đề, giá bán, ảnh bìa) vẫn được GIỮ NGUYÊN VẸN.',
+                      mode: 'all_courses',
+                      requireInput: true
+                    });
+                  }}
+                  className="bg-red-900/30 hover:bg-red-900/60 border border-red-800 text-red-400 hover:text-red-300 text-xs font-bold px-3 py-2.5 rounded-xl flex items-center gap-1.5 cursor-pointer transition-all"
+                  title="Xóa sạch câu hỏi của tất cả các khóa học"
+                >
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Xóa câu hỏi tất cả khóa</span>
+                </button>
+              </div>
             </div>
+
+            {bulkDeleteSuccessMsg && (
+              <div className="bg-emerald-950/80 border border-emerald-600/80 p-3.5 rounded-xl text-xs font-bold text-emerald-300 flex items-center justify-between shadow-lg">
+                <span className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  {bulkDeleteSuccessMsg}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setBulkDeleteSuccessMsg('')}
+                  className="text-slate-400 hover:text-white cursor-pointer px-1"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
 
             {/* SCREENSHOT 1 VIEW: OVERVIEW OF EXAM SETS FOR COURSE (When selectedSetId === null) */}
             {selectedSetId === null ? (
@@ -2390,33 +2577,119 @@ export default function AdminDashboard({
                       </button>
                     </div>
 
+                    {/* Multi-selection Toolbar for Questions */}
+                    {(() => {
+                      const currentSet = getCourseExamSets(selectedCourse).find(s => s.id === selectedSetId);
+                      const currentSetQuestions = currentSet?.questions || [];
+                      const allIds = currentSetQuestions.map(q => q.id);
+                      const areAllSelected = allIds.length > 0 && allIds.every(id => selectedQuestionIds.includes(id));
+                      const selectedCount = selectedQuestionIds.filter(id => allIds.includes(id)).length;
+
+                      if (currentSetQuestions.length === 0) return null;
+
+                      return (
+                        <div className="bg-slate-900/90 border border-slate-700/80 p-2.5 rounded-xl flex items-center justify-between gap-2 text-xs">
+                          <label className="flex items-center gap-2 cursor-pointer text-slate-300 font-medium select-none">
+                            <input
+                              type="checkbox"
+                              checked={areAllSelected}
+                              onChange={() => toggleSelectAllQuestionsInSet(currentSetQuestions)}
+                              className="w-4 h-4 accent-purple-600 rounded cursor-pointer"
+                            />
+                            <span>Chọn tất cả ({currentSetQuestions.length})</span>
+                          </label>
+
+                          <div className="flex items-center gap-1.5">
+                            {selectedCount > 0 ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const targetIds = selectedQuestionIds.filter(id => allIds.includes(id));
+                                  setConfirmDeleteModal({
+                                    isOpen: true,
+                                    title: `Xóa ${targetIds.length} câu hỏi đã chọn?`,
+                                    description: `Bạn có chắc chắn muốn xóa ${targetIds.length} câu hỏi này khỏi bộ đề "${currentSet?.title}"? (Khóa học vẫn được giữ nguyên).`,
+                                    mode: 'selected',
+                                    courseId: selectedCourseId,
+                                    setId: selectedSetId || undefined,
+                                    questionIds: targetIds
+                                  });
+                                }}
+                                className="bg-red-600 hover:bg-red-500 text-white text-[11px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-all shadow-md"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                                <span>Xóa ({selectedCount}) câu</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setConfirmDeleteModal({
+                                    isOpen: true,
+                                    title: `Xóa toàn bộ câu hỏi trong "${currentSet?.title}"?`,
+                                    description: `Bạn có chắc chắn muốn xóa TOÀN BỘ ${currentSetQuestions.length} câu hỏi trong bộ đề này? (Bộ đề và khóa học vẫn được giữ nguyên).`,
+                                    mode: 'set',
+                                    courseId: selectedCourseId,
+                                    setId: selectedSetId || undefined
+                                  });
+                                }}
+                                className="text-red-400 hover:text-red-300 hover:bg-red-950/60 border border-red-900/60 text-[11px] font-semibold px-2 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-all"
+                                title="Xóa toàn bộ câu hỏi trong bộ đề này"
+                              >
+                                <Trash2 className="w-3 h-3 text-red-400" />
+                                <span>Xóa hết bộ đề</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     <div className="space-y-2 max-h-[65vh] overflow-y-auto pr-1">
                       {(getCourseExamSets(selectedCourse).find(s => s.id === selectedSetId)?.questions || []).length > 0 ? (
-                        (getCourseExamSets(selectedCourse).find(s => s.id === selectedSetId)?.questions || []).map((q, idx) => (
-                          <div
-                            key={q.id}
-                            onClick={() => handleOpenEditQuestion(q)}
-                            className="bg-slate-900 border border-slate-700 hover:border-purple-500/60 p-3 rounded-xl text-xs flex items-center justify-between gap-3 cursor-pointer group"
-                          >
-                            <p className="font-medium text-slate-300 group-hover:text-white line-clamp-2">
-                              {idx + 1}. {q.question}
-                            </p>
-                            <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-                              <button
-                                onClick={() => handleOpenEditQuestion(q)}
-                                className="text-slate-400 hover:text-blue-400 p-1"
-                              >
-                                <Edit2 className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteQuestion(q.id)}
-                                className="text-slate-400 hover:text-red-400 p-1"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                        (getCourseExamSets(selectedCourse).find(s => s.id === selectedSetId)?.questions || []).map((q, idx) => {
+                          const isSelected = selectedQuestionIds.includes(q.id);
+                          return (
+                            <div
+                              key={q.id}
+                              onClick={() => handleOpenEditQuestion(q)}
+                              className={`bg-slate-900 border p-3 rounded-xl text-xs flex items-center justify-between gap-3 cursor-pointer group transition-all ${
+                                isSelected ? 'border-purple-500 bg-purple-950/30' : 'border-slate-700 hover:border-purple-500/60'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0" onClick={(e) => e.stopPropagation()}>
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => toggleSelectQuestion(q.id)}
+                                  className="w-4 h-4 accent-purple-600 rounded cursor-pointer shrink-0"
+                                />
+                                <p
+                                  onClick={() => handleOpenEditQuestion(q)}
+                                  className={`font-medium line-clamp-2 cursor-pointer ${isSelected ? 'text-purple-200 font-bold' : 'text-slate-300 group-hover:text-white'}`}
+                                >
+                                  {idx + 1}. {q.question}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  onClick={() => handleOpenEditQuestion(q)}
+                                  className="text-slate-400 hover:text-blue-400 p-1"
+                                  title="Chỉnh sửa câu hỏi"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteQuestion(q.id)}
+                                  className="text-slate-400 hover:text-red-400 p-1"
+                                  title="Xóa câu hỏi này"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                        ))
+                          );
+                        })
                       ) : (
                         <div className="text-center py-8 text-slate-500 text-xs italic space-y-2">
                           <p>Chưa có câu hỏi nào trong bộ đề này.</p>
@@ -2823,6 +3096,29 @@ export default function AdminDashboard({
                       </option>
                     ))}
                   </select>
+
+                  <div className="flex items-center justify-between bg-slate-900 border border-slate-700/80 p-2.5 rounded-xl">
+                    <span className="text-[11px] text-slate-300">
+                      Dọn sạch câu hỏi cũ trước khi import?
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const targetCourse = courses.find((c) => c.id === bulkCourseId);
+                        setConfirmDeleteModal({
+                          isOpen: true,
+                          title: 'Xóa toàn bộ câu hỏi của khóa này?',
+                          description: `Bạn có muốn xóa sạch toàn bộ câu hỏi của khóa học "${targetCourse?.title || bulkCourseId}" trước khi import không? (Khóa học vẫn được giữ nguyên).`,
+                          mode: 'course',
+                          courseId: bulkCourseId
+                        });
+                      }}
+                      className="bg-red-950 hover:bg-red-900 border border-red-700/80 text-red-300 text-[11px] font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1 cursor-pointer transition-all"
+                    >
+                      <Trash2 className="w-3 h-3 text-red-400" />
+                      <span>Xóa câu hỏi cũ</span>
+                    </button>
+                  </div>
                 </div>
 
                 <div className="border-t border-slate-700/80 pt-4 space-y-3">
@@ -3526,6 +3822,89 @@ export default function AdminDashboard({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIRM BULK DELETE QUESTIONS MODAL */}
+      {confirmDeleteModal.isOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border-2 border-red-600/80 rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-xl bg-red-950 border border-red-700 flex items-center justify-center shrink-0">
+                <Trash2 className="w-6 h-6 text-red-400" />
+              </div>
+              <div>
+                <h3 className="font-display font-extrabold text-base text-white">
+                  {confirmDeleteModal.title}
+                </h3>
+                <p className="text-xs text-slate-300 mt-2 leading-relaxed">
+                  {confirmDeleteModal.description}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-red-950/40 border border-red-900/60 p-3 rounded-xl text-xs text-red-200 space-y-1">
+              <p className="font-bold flex items-center gap-1.5 text-emerald-400">
+                <Shield className="w-4 h-4 text-emerald-400" /> An toàn tuyệt đối cho khóa học:
+              </p>
+              <p className="text-[11px] text-slate-300">
+                Hệ thống <strong>CHỈ XÓA CÂU HỎI</strong>, hoàn toàn <strong>KHÔNG XÓA KHÓA HỌC</strong> (tiêu đề, giá bán, ảnh đại diện, platform O11/ODC vẫn nguyên vẹn).
+              </p>
+            </div>
+
+            {confirmDeleteModal.requireInput && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-300">
+                  Nhập chữ <span className="text-red-400 font-mono font-bold">DELETE</span> để xác nhận:
+                </label>
+                <input
+                  type="text"
+                  value={deleteConfirmInput}
+                  onChange={(e) => setDeleteConfirmInput(e.target.value)}
+                  placeholder="DELETE"
+                  className="w-full bg-slate-950 border border-red-800 rounded-xl p-3 text-xs text-white font-mono font-bold outline-none focus:border-red-500"
+                />
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmDeleteModal({ isOpen: false, title: '', description: '', mode: 'selected' });
+                  setDeleteConfirmInput('');
+                }}
+                disabled={isBulkDeleting}
+                className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer transition-all"
+              >
+                Hủy bỏ
+              </button>
+
+              <button
+                type="button"
+                onClick={() => executeBulkDelete(
+                  confirmDeleteModal.mode,
+                  confirmDeleteModal.courseId,
+                  confirmDeleteModal.setId,
+                  confirmDeleteModal.questionIds
+                )}
+                disabled={isBulkDeleting || (confirmDeleteModal.requireInput && deleteConfirmInput.trim().toUpperCase() !== 'DELETE')}
+                className="bg-red-600 hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold px-5 py-2.5 rounded-xl flex items-center gap-2 cursor-pointer transition-all shadow-lg shadow-red-900/40"
+              >
+                {isBulkDeleting ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Đang xóa câu hỏi...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>Xác nhận xóa câu hỏi</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

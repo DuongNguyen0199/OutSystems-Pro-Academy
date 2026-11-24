@@ -62,12 +62,11 @@ export default function App() {
       try {
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const totalQ = parsed.reduce((sum: number, c: any) => sum + (c.mockExam?.length || 0), 0);
-          if (totalQ > 0) return parsed;
+          return parsed;
         }
       } catch (e) {}
     }
-    return enrichCourseList(fallbackCourses);
+    return fallbackCourses;
   });
   const [dbSource, setDbSource] = useState<string>('local');
   const [searchQuery, setSearchQuery] = useState('');
@@ -113,10 +112,11 @@ export default function App() {
       })
       .then((data) => {
         if (data && data.data && Array.isArray(data.data) && data.data.length > 0) {
-          const enriched = enrichCourseList(data.data);
-          setCoursesList(enriched);
+          // If database is connected, strictly respect data from database (no auto-injecting prepopulated dumps)
+          const finalCourses = data.source === 'supabase' ? data.data : enrichCourseList(data.data);
+          setCoursesList(finalCourses);
           try {
-            localStorage.setItem('outsystems_courses_cache', JSON.stringify(enriched));
+            localStorage.setItem('outsystems_courses_cache', JSON.stringify(finalCourses));
           } catch (e) {}
         }
         if (data && data.source) {
