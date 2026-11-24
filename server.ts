@@ -103,15 +103,26 @@ const notificationSettings = {
 // Course fetching endpoint (Item 4: Alphabetical A -> Z sorting for all roles)
 app.get("/api/courses", async (req, res) => {
   try {
-    res.setHeader("Cache-Control", "public, max-age=60, s-maxage=300");
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
     const supabase = getSupabase();
-    let coursesData = fallbackCourses;
+    let coursesData: any[] = [];
+    let isSupabaseConnected = false;
 
     if (supabase) {
       const { data, error } = await supabase.from("courses").select("*");
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         coursesData = [...data];
+        isSupabaseConnected = true;
+      } else if (error) {
+        console.error("Supabase /api/courses query error:", error.message);
       }
+    }
+
+    // Only fallback to hardcoded courses if Supabase is completely unconfigured or errored out
+    if (!isSupabaseConnected) {
+      coursesData = fallbackCourses;
     }
 
     const mapped = coursesData.map((item: any) => {
@@ -160,28 +171,35 @@ app.get("/api/courses", async (req, res) => {
         sets = inMemoryCourseExamSets[item.id] || inMemoryCourseExamSets[targetUuid];
       }
 
-      // Check prepopulated dataset for fallback questions if DB row has no questions
-      const prepopulated = getPrepopulatedForCourse(item.title || (fallback ? fallback.title : ''));
+      // DO NOT auto-resurrect questions with prepopulated dataset if Supabase is connected!
+      // Strictly respect what is in Supabase database!
+      if (!isSupabaseConnected) {
+        const prepopulated = getPrepopulatedForCourse(item.title || (fallback ? fallback.title : ''));
+        const setQuestionsCount = Array.isArray(sets) ? sets.reduce((sum: number, s: any) => sum + (s.questions ? s.questions.length : 0), 0) : 0;
 
-      const setQuestionsCount = Array.isArray(sets) ? sets.reduce((sum: number, s: any) => sum + (s.questions ? s.questions.length : 0), 0) : 0;
-
-      if (!sets || !Array.isArray(sets) || sets.length === 0 || setQuestionsCount === 0) {
-        if (prepopulated && prepopulated.examSets && prepopulated.examSets.length > 0) {
-          sets = prepopulated.examSets;
-        } else if (fallback && fallback.examSets && fallback.examSets.length > 0) {
-          sets = fallback.examSets;
+        if (!sets || !Array.isArray(sets) || sets.length === 0 || setQuestionsCount === 0) {
+          if (prepopulated && prepopulated.examSets && prepopulated.examSets.length > 0) {
+            sets = prepopulated.examSets;
+          } else if (fallback && fallback.examSets && fallback.examSets.length > 0) {
+            sets = fallback.examSets;
+          }
         }
       }
 
-      // Ensure mockExam is populated from sets or prepopulated
+      // Extract mockExam from sets if available
       if (!mockExam || mockExam.length === 0) {
         const allSetQuestions = Array.isArray(sets) ? sets.flatMap((s: any) => s.questions || []) : [];
         if (allSetQuestions.length > 0) {
           mockExam = allSetQuestions;
-        } else if (prepopulated && prepopulated.mockExam && prepopulated.mockExam.length > 0) {
-          mockExam = prepopulated.mockExam;
-        } else if (fallback && fallback.mockExam && fallback.mockExam.length > 0) {
-          mockExam = fallback.mockExam;
+        } else if (!isSupabaseConnected) {
+          const prepopulated = getPrepopulatedForCourse(item.title || (fallback ? fallback.title : ''));
+          if (prepopulated && prepopulated.mockExam && prepopulated.mockExam.length > 0) {
+            mockExam = prepopulated.mockExam;
+          } else if (fallback && fallback.mockExam && fallback.mockExam.length > 0) {
+            mockExam = fallback.mockExam;
+          } else {
+            mockExam = [];
+          }
         } else {
           mockExam = [];
         }

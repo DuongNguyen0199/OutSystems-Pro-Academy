@@ -230,7 +230,7 @@ export default function App() {
               </div>
               <div className="bg-slate-800/80 backdrop-blur-xs border border-slate-700/80 p-3.5 rounded-2xl text-center space-y-1">
                 <span className="font-display font-extrabold text-xl text-emerald-400">
-                  {totalQuestionsCount > 0 ? `${totalQuestionsCount.toLocaleString()}+` : '1,800+'}
+                  {totalQuestionsCount > 0 ? `${totalQuestionsCount.toLocaleString()}+` : '0'}
                 </span>
                 <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">Exam Questions</p>
               </div>
